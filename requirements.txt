@@ -1,0 +1,4 @@
+pywin32
+adb-shell
+opencv-python
+PyQt6

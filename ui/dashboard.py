@@ -3,7 +3,10 @@ import time
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QTableWidget, QTableWidgetItem, 
                              QLabel, QPushButton, QHeaderView, QFrame, QStatusBar,
-                             QTabWidget, QFileDialog, QGridLayout, QLineEdit, QScrollArea)
+                             QTabWidget, QFileDialog, QGridLayout, QLineEdit, QScrollArea,
+                             QCheckBox, QGroupBox)
+from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtCore import QTimer, Qt, pyqtSignal, QObject, QSize
 import shutil
 import os
 from PyQt6.QtCore import QTimer, Qt, pyqtSignal, QObject
@@ -12,6 +15,7 @@ class BotSignals(QObject):
     status_changed = pyqtSignal(str)
     tasks_updated = pyqtSignal(list)
     log_message = pyqtSignal(str)
+    new_frame = pyqtSignal(QImage)
 
 class LiveDashboard(QMainWindow):
     def __init__(self):
@@ -47,8 +51,13 @@ class LiveDashboard(QMainWindow):
         
         self.stop_btn = QPushButton("⏹ STOP")
         self.stop_btn.setStyleSheet("background-color: #c0392b; color: white; font-weight: bold; width: 100px;")
+        
+        self.center_btn = QPushButton("📍 CENTER")
+        self.center_btn.setStyleSheet("background-color: #8e44ad; color: white; font-weight: bold; width: 100px;")
 
         control_bar_layout.addWidget(self.status_label)
+        control_bar_layout.addStretch()
+        control_bar_layout.addWidget(self.center_btn)
         control_bar_layout.addStretch()
         control_bar_layout.addWidget(self.start_btn)
         control_bar_layout.addWidget(self.pause_btn)
@@ -80,6 +89,33 @@ class LiveDashboard(QMainWindow):
     def _setup_dashboard_tab(self):
         layout = QHBoxLayout(self.dashboard_tab)
         
+        # Left Panel: Live Stream & Selection
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        
+        # 1. Screen Stream
+        self.screen_label = QLabel("Waiting for LDPlayer...")
+        self.screen_label.setFixedSize(480, 270) # 16:9 scaled down
+        self.screen_label.setStyleSheet("background-color: black; color: white; border: 2px solid #34495e;")
+        self.screen_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        left_layout.addWidget(self.screen_label)
+        
+        # 2. Resource Selection
+        res_group = QGroupBox("Select Resources to Gather")
+        res_layout = QGridLayout()
+        self.res_checks = {}
+        resources = ["Food", "Gold", "Wood", "Stone", "Ore"]
+        for i, res in enumerate(resources):
+            cb = QCheckBox(res)
+            cb.setChecked(True)
+            self.res_checks[res] = cb
+            res_layout.addWidget(cb, i // 2, i % 2)
+        res_group.setLayout(res_layout)
+        left_layout.addWidget(res_group)
+        left_layout.addStretch()
+        
+        layout.addWidget(left_panel)
+
         # Right Panel: Data & Logs
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
@@ -106,6 +142,13 @@ class LiveDashboard(QMainWindow):
         right_layout.addWidget(self.log_console)
         
         layout.addWidget(right_panel)
+        
+        # Connect new_frame signal
+        self.signals.new_frame.connect(self.update_screen)
+
+    def update_screen(self, q_img):
+        pixmap = QPixmap.fromImage(q_img)
+        self.screen_label.setPixmap(pixmap.scaled(self.screen_label.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
 
     def _setup_image_tab(self):
         layout = QVBoxLayout(self.image_tab)

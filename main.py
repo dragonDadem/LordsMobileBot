@@ -73,12 +73,50 @@ class LordsMobileBot:
         capturer = ScreenCapture(self.emulator.window_handle)
         dispatcher = ArmyDispatcher(self.emulator)
         
+        # 1. Wait for Game & Auto-Startup
+        self.ui.signals.log_message.emit("Starting Auto-Boot sequence...")
+        startup_complete = False
+        
         while self.running:
             if self.paused:
                 time.sleep(1)
                 continue
 
             try:
+                # --- LIVE STREAM UPDATE ---
+                screen_img = capturer.capture_win32()
+                if screen_img is not None:
+                    h, w, ch = screen_img.shape
+                    bytes_per_line = ch * w
+                    q_img = QImage(screen_img.data, w, h, bytes_per_line, QImage.Format.Format_BGR888)
+                    self.ui.signals.new_frame.emit(q_img)
+                else:
+                    time.sleep(1)
+                    continue
+
+                # --- AUTO-STARTUP LOGIC ---
+                if not startup_complete:
+                    # Check for "Base to Map" button
+                    match = self.detector.detect_ui_button(screen_img, 'base_to_map')
+                    if match:
+                        self.ui.signals.log_message.emit("Detected 'Go to Map' button. Clicking...")
+                        self.emulator.send_click(match['x'], match['y'])
+                        time.sleep(5)
+                        
+                        # Go to Center (960, 537)
+                        self.ui.signals.log_message.emit("Opening Mini-Map to go to center...")
+                        # Assume mini-map button is at a fixed location or detected
+                        # Then click the center coordinates specified by user
+                        self.emulator.send_click(960, 537)
+                        self.ui.signals.log_message.emit("Navigated to world center (960, 537).")
+                        startup_complete = True
+                        self.ui.signals.status_changed.emit("Gathering Loop")
+                    else:
+                        self.ui.signals.log_message.emit("Waiting for game to load or 'Go to Map' button...")
+                        time.sleep(3)
+                        continue
+
+                # --- GATHERING LOOP ---
                 # 1. Update Dashboard with current tasks
                 active_tasks = self.db.get_all_active_tasks()
                 self.ui.signals.tasks_updated.emit(active_tasks)
@@ -92,18 +130,33 @@ class LordsMobileBot:
 
                 # 3. Check for available army slots (max 6)
                 if len(active_tasks) < 6:
-                    # Scan logic placeholder
-                    self.ui.signals.log_message.emit("Searching for new resource tiles...")
-                    # target_pos = self.scanner.get_next_grid_pos()
-                    # ... vision detection ...
+                    # Get selected resources from UI
+                    selected_res = [res for res, cb in self.ui.res_checks.items() if cb.isChecked()]
+                    self.ui.signals.log_message.emit(f"Searching for: {', '.join(selected_res)}")
+                    
+                    # Detection & Dispatch
+                    match = self.detector.detect_best_resource(screen_img) # Priority logic inside
+                    if match:
+                        res_type = match['name'].split('_')[0]
+                        if res_type in selected_res:
+                            self.ui.signals.log_message.emit(f"Found {match['name']}! Dispatching army...")
+                            if dispatcher.dispatch_to_tile(match['x'], match['y'], self.detector, screen_img):
+                                army_id = len(active_tasks) + 1
+                                # Get custom duration from DB or default
+                                duration = 3600 # 1 hour default
+                                self.db.add_active_army(army_id, res_type, 5, duration, 0, 0)
+                                self.ui.signals.log_message.emit(f"Army {army_id} sent to {match['name']}.")
+                    else:
+                        # Move map if nothing found
+                        self.ui.signals.log_message.emit("No resources found. Moving map...")
+                        # scanner logic here
                 
                 # Human-like safety delay
-                Humanizer.sleep(3, 7)
-                Humanizer.random_pause()
+                Humanizer.sleep(2, 4)
 
             except Exception as e:
                 self.ui.signals.log_message.emit(f"Runtime Error: {str(e)}")
-                time.sleep(10) # Wait longer on error
+                time.sleep(5)
 
 def main():
     app = QApplication(sys.argv)
@@ -113,6 +166,7 @@ def main():
     # Connect UI buttons to bot logic
     dashboard.start_btn.clicked.connect(bot.start)
     dashboard.stop_btn.clicked.connect(bot.stop)
+    dashboard.center_btn.clicked.connect(lambda: bot.emulator.send_click(960, 537))
     
     def save_timers():
         for row in range(dashboard.timer_table.rowCount()):

@@ -187,6 +187,23 @@ def main():
                     dashboard.timer_table.item(row, 1).text() == str(row_data['resource_level'])):
                     dashboard.timer_table.setItem(row, 2, QTableWidgetItem(str(row_data['duration_seconds'] // 60)))
 
+    # Load Emulator Settings
+    saved_path = bot.db.get_ui_setting('emu_path')
+    saved_name = bot.db.get_ui_setting('emu_name')
+    if saved_path: dashboard.emu_path_input.setText(saved_path)
+    if saved_name: dashboard.emu_name_input.setText(saved_name)
+    
+    def save_emu_settings():
+        path = dashboard.emu_path_input.text()
+        name = dashboard.emu_name_input.text()
+        bot.db.update_ui_setting('emu_path', path)
+        bot.db.update_ui_setting('emu_name', name)
+        bot.emulator.exe_path = path
+        bot.emulator.window_title = name
+        dashboard.add_log("Emulator settings saved.")
+
+    dashboard.save_emu_settings_btn.clicked.connect(save_emu_settings)
+
     if bot.initialize():
         dashboard.show()
         sys.exit(app.exec())

@@ -84,6 +84,11 @@ class LiveDashboard(QMainWindow):
         self._setup_timer_tab()
         self.tabs.addTab(self.timer_tab, "Resource Timers")
 
+        # Tab 4: Emulator Settings
+        self.emu_tab = QWidget()
+        self._setup_emu_tab()
+        self.tabs.addTab(self.emu_tab, "Emulator Settings")
+
         self.setStatusBar(QStatusBar())
 
     def _setup_dashboard_tab(self):
@@ -212,6 +217,36 @@ class LiveDashboard(QMainWindow):
         self.save_timers_btn = QPushButton("SAVE ALL TIMER SETTINGS")
         self.save_timers_btn.setStyleSheet("background-color: #2980b9; color: white; padding: 10px;")
         layout.addWidget(self.save_timers_btn)
+
+    def _setup_emu_tab(self):
+        layout = QVBoxLayout(self.emu_tab)
+        grid = QGridLayout()
+        
+        grid.addWidget(QLabel("<b>Emulator Executable Path:</b>"), 0, 0)
+        self.emu_path_input = QLineEdit()
+        self.emu_path_input.setPlaceholderText("C:/LDPlayer/LDPlayer9/dnplayer.exe")
+        grid.addWidget(self.emu_path_input, 0, 1)
+        
+        browse_btn = QPushButton("Browse")
+        browse_btn.clicked.connect(self._browse_emu_path)
+        grid.addWidget(browse_btn, 0, 2)
+        
+        grid.addWidget(QLabel("<b>Emulator Window Name:</b>"), 1, 0)
+        self.emu_name_input = QLineEdit()
+        self.emu_name_input.setText("LDPlayer")
+        grid.addWidget(self.emu_name_input, 1, 1)
+        
+        layout.addLayout(grid)
+        layout.addStretch()
+        
+        self.save_emu_settings_btn = QPushButton("SAVE EMULATOR SETTINGS")
+        self.save_emu_settings_btn.setStyleSheet("background-color: #8e44ad; color: white; padding: 10px;")
+        layout.addWidget(self.save_emu_settings_btn)
+
+    def _browse_emu_path(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select LDPlayer Executable", "", "Executable Files (*.exe)")
+        if file_path:
+            self.emu_path_input.setText(file_path)
 
     def _upload_template(self, res_type, level):
         file_path, _ = QFileDialog.getOpenFileName(self, "Select Template Image", "", "Image Files (*.png *.jpg)")

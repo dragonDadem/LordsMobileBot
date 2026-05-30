@@ -32,8 +32,18 @@ class BotDatabase:
         # Table for resource cooldown configurations
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS cooldown_configs (
-                resource_key TEXT PRIMARY KEY, -- e.g., "Gold_lv5"
-                duration_seconds INTEGER
+                resource_type TEXT,
+                resource_level INTEGER,
+                duration_seconds INTEGER,
+                PRIMARY KEY (resource_type, resource_level)
+            )
+        ''')
+        
+        # Table for button/UI settings (paths or coordinates)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ui_settings (
+                setting_key TEXT PRIMARY KEY,
+                setting_value TEXT
             )
         ''')
         
@@ -86,3 +96,41 @@ if __name__ == "__main__":
     db = BotDatabase()
     db.add_active_army(1, 'Gold', 5, 3600, 233, 812)
     print(f"Active Tasks: {db.get_all_active_tasks()}")
+
+    def update_cooldown(self, res_type, level, seconds):
+        """Update the cooldown for a specific resource and level."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT OR REPLACE INTO cooldown_configs (resource_type, resource_level, duration_seconds)
+            VALUES (?, ?, ?)
+        ''', (res_type, level, seconds))
+        conn.commit()
+        conn.close()
+
+    def get_all_cooldowns(self):
+        """Retrieve all cooldown settings."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM cooldown_configs')
+        configs = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return configs
+
+    def update_ui_setting(self, key, value):
+        """Update a general UI/Button setting."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('INSERT OR REPLACE INTO ui_settings (setting_key, setting_value) VALUES (?, ?)', (key, value))
+        conn.commit()
+        conn.close()
+
+    def get_ui_setting(self, key):
+        """Retrieve a specific UI setting."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT setting_value FROM ui_settings WHERE setting_key = ?', (key,))
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else None

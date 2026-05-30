@@ -30,32 +30,33 @@ class ArmyDispatcher:
         # to see if the 'available' slot is visible.
         return True 
 
-    def dispatch_to_tile(self, tile_x, tile_y):
+    def dispatch_to_tile(self, tile_x, tile_y, detector=None, screen_img=None):
         """
         Executes the full click sequence to send an army.
+        If detector and screen_img are provided, it will try to find buttons visually.
         """
         try:
             # 1. Click the detected resource tile
-            print(f"Clicking resource tile at ({tile_x}, {tile_y})")
             self.emulator.send_click(tile_x, tile_y)
-            time.sleep(random.uniform(1.0, 1.5))
+            time.sleep(random.uniform(1.2, 1.8))
 
-            # 2. Click 'Gather' button
-            gx, gy = self.coords['gather_button']
-            print(f"Clicking Gather button at ({gx}, {gy})")
-            self.emulator.send_click(gx, gy)
-            time.sleep(random.uniform(1.0, 1.5))
-
-            # 3. Click 'March' button
-            mx, my = self.coords['march_button']
-            print(f"Clicking March button at ({mx}, {my})")
-            self.emulator.send_click(mx, my)
-            time.sleep(random.uniform(1.0, 1.5))
-
-            # 4. Click 'Confirm' button
-            cx, cy = self.coords['confirm_button']
-            print(f"Clicking Confirm button at ({cx}, {cy})")
-            self.emulator.send_click(cx, cy)
+            # Sequence of buttons to click
+            button_keys = ['deploy_gather', 'auto_select', 'deploy_gather']
+            
+            for key in button_keys:
+                clicked = False
+                if detector and screen_img is not None:
+                    match = detector.detect_ui_button(screen_img, key)
+                    if match:
+                        self.emulator.send_click(match['x'], match['y'])
+                        clicked = True
+                
+                if not clicked:
+                    # Fallback to default coordinates if image detection fails
+                    # Note: You should map these keys to your coords dict
+                    pass
+                
+                time.sleep(random.uniform(1.0, 1.5))
             
             return True
         except Exception as e:

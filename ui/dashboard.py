@@ -2,7 +2,10 @@ import sys
 import time
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QTableWidget, QTableWidgetItem, 
-                             QLabel, QPushButton, QHeaderView, QFrame, QStatusBar)
+                             QLabel, QPushButton, QHeaderView, QFrame, QStatusBar,
+                             QTabWidget, QFileDialog, QGridLayout, QLineEdit, QScrollArea)
+import shutil
+import os
 from PyQt6.QtCore import QTimer, Qt, pyqtSignal, QObject
 
 class BotSignals(QObject):
@@ -26,38 +29,57 @@ class LiveDashboard(QMainWindow):
     def _init_ui(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
+        main_layout = QVBoxLayout(central_widget)
 
-        # Left Panel: Controls & Status
-        left_panel = QFrame()
-        left_panel.setFixedWidth(300)
-        left_panel.setFrameShape(QFrame.Shape.StyledPanel)
-        left_layout = QVBoxLayout(left_panel)
-
+        # Top Section: Control Bar
+        control_bar = QFrame()
+        control_bar.setFixedHeight(80)
+        control_bar_layout = QHBoxLayout(control_bar)
+        
         self.status_label = QLabel("STATUS: IDLE")
-        self.status_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #7f8c8d; padding: 10px; border: 1px solid #bdc3c7;")
-        left_layout.addWidget(self.status_label)
-
-        # Action Buttons
-        self.start_btn = QPushButton("▶ START BOT")
-        self.start_btn.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold; padding: 15px;")
+        self.status_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #7f8c8d; padding: 5px;")
+        
+        self.start_btn = QPushButton("▶ START")
+        self.start_btn.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold; width: 100px;")
         
         self.pause_btn = QPushButton("⏸ PAUSE")
-        self.pause_btn.setStyleSheet("background-color: #f39c12; color: white; font-weight: bold; padding: 15px;")
+        self.pause_btn.setStyleSheet("background-color: #f39c12; color: white; font-weight: bold; width: 100px;")
         
-        self.stop_btn = QPushButton("⏹ STOP BOT")
-        self.stop_btn.setStyleSheet("background-color: #c0392b; color: white; font-weight: bold; padding: 15px;")
+        self.stop_btn = QPushButton("⏹ STOP")
+        self.stop_btn.setStyleSheet("background-color: #c0392b; color: white; font-weight: bold; width: 100px;")
 
-        left_layout.addWidget(self.start_btn)
-        left_layout.addWidget(self.pause_btn)
-        left_layout.addWidget(self.stop_btn)
-        left_layout.addStretch()
+        control_bar_layout.addWidget(self.status_label)
+        control_bar_layout.addStretch()
+        control_bar_layout.addWidget(self.start_btn)
+        control_bar_layout.addWidget(self.pause_btn)
+        control_bar_layout.addWidget(self.stop_btn)
+        
+        main_layout.addWidget(control_bar)
 
-        # Quick Settings / Info
-        info_label = QLabel("Quick Info:\n- Res: 1600x900\n- ADB: Connected\n- Map: Scanning...")
-        info_label.setStyleSheet("color: #34495e; background: #ecf0f1; padding: 10px;")
-        left_layout.addWidget(info_label)
+        # Main Section: Tabs
+        self.tabs = QTabWidget()
+        main_layout.addWidget(self.tabs)
 
+        # Tab 1: Dashboard (Existing Logic)
+        self.dashboard_tab = QWidget()
+        self._setup_dashboard_tab()
+        self.tabs.addTab(self.dashboard_tab, "Dashboard")
+
+        # Tab 2: Image Management
+        self.image_tab = QWidget()
+        self._setup_image_tab()
+        self.tabs.addTab(self.image_tab, "Images & Templates")
+
+        # Tab 3: Timer Settings
+        self.timer_tab = QWidget()
+        self._setup_timer_tab()
+        self.tabs.addTab(self.timer_tab, "Resource Timers")
+
+        self.setStatusBar(QStatusBar())
+
+    def _setup_dashboard_tab(self):
+        layout = QHBoxLayout(self.dashboard_tab)
+        
         # Right Panel: Data & Logs
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
@@ -70,7 +92,6 @@ class LiveDashboard(QMainWindow):
         self.task_table = QTableWidget(0, 5)
         self.task_table.setHorizontalHeaderLabels(["Army", "Resource", "Level", "Location", "Time Left"])
         self.task_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.task_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         right_layout.addWidget(self.task_table)
 
         # Simple Log Console
@@ -83,11 +104,87 @@ class LiveDashboard(QMainWindow):
         self.log_console.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.log_console.setFixedHeight(150)
         right_layout.addWidget(self.log_console)
+        
+        layout.addWidget(right_panel)
 
-        main_layout.addWidget(left_panel)
-        main_layout.addWidget(right_panel)
+    def _setup_image_tab(self):
+        layout = QVBoxLayout(self.image_tab)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        grid = QGridLayout(content)
+        
+        # Resource Templates Section
+        row = 0
+        grid.addWidget(QLabel("<b>RESOURCE TEMPLATES (Levels 5 to 1)</b>"), row, 0, 1, 3)
+        row += 1
+        
+        resources = ["Food", "Gold", "Wood", "Stone", "Ore"]
+        for res in resources:
+            grid.addWidget(QLabel(f"<b>{res}</b>"), row, 0)
+            for lv in range(5, 0, -1):
+                btn = QPushButton(f"Upload Lv{lv}")
+                btn.clicked.connect(lambda checked, r=res, l=lv: self._upload_template(r, l))
+                grid.addWidget(btn, row, 6 - lv)
+            row += 1
+            
+        # UI Buttons Section
+        row += 1
+        grid.addWidget(QLabel("<b>UI CONTROL BUTTONS</b>"), row, 0, 1, 3)
+        row += 1
+        
+        ui_buttons = [
+            ("Base to Map", "base_to_map"),
+            ("Exit Panel", "exit_panel"),
+            ("Auto-Select", "auto_select"),
+            ("Deploy/Gather", "deploy_gather")
+        ]
+        
+        for label, key in ui_buttons:
+            grid.addWidget(QLabel(label), row, 0)
+            btn = QPushButton("Upload Image")
+            btn.clicked.connect(lambda checked, k=key: self._upload_ui_button(k))
+            grid.addWidget(btn, row, 1)
+            row += 1
+            
+        scroll.setWidget(content)
+        layout.addWidget(scroll)
 
-        self.setStatusBar(QStatusBar())
+    def _setup_timer_tab(self):
+        layout = QVBoxLayout(self.timer_tab)
+        self.timer_table = QTableWidget(25, 3)
+        self.timer_table.setHorizontalHeaderLabels(["Resource", "Level", "Time (Minutes)"])
+        self.timer_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        
+        resources = ["Food", "Gold", "Wood", "Stone", "Ore"]
+        row = 0
+        for res in resources:
+            for lv in range(5, 0, -1):
+                self.timer_table.setItem(row, 0, QTableWidgetItem(res))
+                self.timer_table.setItem(row, 1, QTableWidgetItem(str(lv)))
+                self.timer_table.setItem(row, 2, QTableWidgetItem("60")) # Default
+                row += 1
+        
+        layout.addWidget(self.timer_table)
+        self.save_timers_btn = QPushButton("SAVE ALL TIMER SETTINGS")
+        self.save_timers_btn.setStyleSheet("background-color: #2980b9; color: white; padding: 10px;")
+        layout.addWidget(self.save_timers_btn)
+
+    def _upload_template(self, res_type, level):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Template Image", "", "Image Files (*.png *.jpg)")
+        if file_path:
+            dest = f"assets/templates/{res_type}_lv{level}.png"
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            shutil.copy(file_path, dest)
+            self.add_log(f"Updated template: {res_type} Level {level}")
+
+    def _upload_ui_button(self, key):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Button Image", "", "Image Files (*.png *.jpg)")
+        if file_path:
+            dest = f"assets/ui/{key}.png"
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            shutil.copy(file_path, dest)
+            self.add_log(f"Updated UI button: {key}")
 
     def update_status_label(self, status):
         self.status_label.setText(f"STATUS: {status.upper()}")

@@ -114,6 +114,25 @@ def main():
     dashboard.start_btn.clicked.connect(bot.start)
     dashboard.stop_btn.clicked.connect(bot.stop)
     
+    def save_timers():
+        for row in range(dashboard.timer_table.rowCount()):
+            res_type = dashboard.timer_table.item(row, 0).text()
+            level = int(dashboard.timer_table.item(row, 1).text())
+            minutes = int(dashboard.timer_table.item(row, 2).text())
+            bot.db.update_cooldown(res_type, level, minutes * 60)
+        dashboard.add_log("All timer settings saved to database.")
+
+    dashboard.save_timers_btn.clicked.connect(save_timers)
+    
+    # Load existing timers into UI
+    existing_timers = bot.db.get_all_cooldowns()
+    if existing_timers:
+        for row_data in existing_timers:
+            for row in range(dashboard.timer_table.rowCount()):
+                if (dashboard.timer_table.item(row, 0).text() == row_data['resource_type'] and 
+                    dashboard.timer_table.item(row, 1).text() == str(row_data['resource_level'])):
+                    dashboard.timer_table.setItem(row, 2, QTableWidgetItem(str(row_data['duration_seconds'] // 60)))
+
     if bot.initialize():
         dashboard.show()
         sys.exit(app.exec())

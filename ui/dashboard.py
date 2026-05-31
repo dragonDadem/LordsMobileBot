@@ -224,7 +224,7 @@ class LiveDashboard(QMainWindow):
         
         grid.addWidget(QLabel("<b>Emulator Executable Path:</b>"), 0, 0)
         self.emu_path_input = QLineEdit()
-        self.emu_path_input.setPlaceholderText("C:/LDPlayer/LDPlayer9/dnplayer.exe")
+        self.emu_path_input.setText("C:/LDPlayer/LDPlayer9/ldplayer.exe")
         grid.addWidget(self.emu_path_input, 0, 1)
         
         browse_btn = QPushButton("Browse")

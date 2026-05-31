@@ -179,7 +179,11 @@ def main():
     dashboard.save_timers_btn.clicked.connect(save_timers)
     
     # Load existing timers into UI
-    existing_timers = bot.db.get_all_cooldowns()
+    try:
+        existing_timers = bot.db.get_all_cooldowns() if hasattr(bot.db, 'get_all_cooldowns') else []
+    except:
+        existing_timers = []
+
     if existing_timers:
         for row_data in existing_timers:
             for row in range(dashboard.timer_table.rowCount()):

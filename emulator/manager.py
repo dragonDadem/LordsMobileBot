@@ -3,7 +3,7 @@ import time
 import win32gui
 import win32process
 import subprocess
-from adb_shell.auth.sign_python_rsa import PythonRSASigner
+from adb_shell.auth.sign_pythonrsa import PythonRSASigner
 from adb_shell.adb_device import AdbDeviceTcp
 
 class EmulatorManager:

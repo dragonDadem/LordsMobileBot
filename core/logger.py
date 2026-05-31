@@ -1,29 +1,37 @@
 import logging
 import os
+from datetime import datetime
 
-def setup_logger(log_file='logs/bot.log'):
-    """Sets up a logger that outputs to both file and console."""
-    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+def setup_logger():
+    """Sets up a robust logging system that writes to both file and console."""
+    if not os.path.exists('logs'):
+        os.makedirs('logs')
+        
+    log_filename = f"logs/bot_{datetime.now().strftime('%Y%m%d')}.log"
     
+    # Create logger
     logger = logging.getLogger('LordsMobileBot')
     logger.setLevel(logging.DEBUG)
     
-    # Create handlers
-    c_handler = logging.StreamHandler()
-    f_handler = logging.FileHandler(log_file)
-    c_handler.setLevel(logging.INFO)
-    f_handler.setLevel(logging.DEBUG)
+    # Create file handler
+    fh = logging.FileHandler(log_filename, encoding='utf-8')
+    fh.setLevel(logging.DEBUG)
     
-    # Create formatters and add to handlers
-    format_str = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    c_handler.setFormatter(format_str)
-    f_handler.setFormatter(format_str)
+    # Create console handler
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
     
-    # Add handlers to the logger
+    # Create formatter
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    ch.setFormatter(formatter)
+    
+    # Add handlers
     if not logger.handlers:
-        logger.addHandler(c_handler)
-        logger.addHandler(f_handler)
+        logger.addHandler(fh)
+        logger.addHandler(ch)
         
     return logger
 
+# Global logger instance
 logger = setup_logger()

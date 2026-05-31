@@ -1,9 +1,11 @@
 import sys
-import threading
 import time
-from PyQt6.QtWidgets import QApplication
+import threading
+import os
+from PyQt6.QtWidgets import QApplication, QTableWidgetItem
+from PyQt6.QtGui import QImage
 
-# Import all modules
+# Project Modules
 from emulator.manager import EmulatorManager
 from vision.capture import ScreenCapture
 from vision.detector import ResourceDetector
@@ -12,49 +14,37 @@ from dispatch.manager import ArmyDispatcher
 from storage.database import BotDatabase
 from safety.humanizer import Humanizer
 from ui.dashboard import LiveDashboard
+from core.config import ConfigManager
+from core.logger import logger
 
 class LordsMobileBot:
-    """
-    Main Bot Orchestrator
-    Integrates all modules into a functional automation framework.
-    """
     def __init__(self, ui):
         self.ui = ui
-        self.emulator = EmulatorManager()
+        self.config = ConfigManager()
         self.db = BotDatabase()
-        self.detector = ResourceDetector()
-        self.scanner = SpiralScanner()
         self.running = False
         self.paused = False
-
-    def initialize(self):
-        self.ui.signals.status_changed.emit("Initializing...")
-        self.ui.signals.log_message.emit("Bot initialization started.")
         
-        try:
-            # 1. Find LDPlayer
-            if not self.emulator.find_ldplayer_window():
-                self.ui.signals.status_changed.emit("Error: LDPlayer Not Found")
-                self.ui.signals.log_message.emit("CRITICAL: LDPlayer window not detected.")
+        # Initialize Core Components with config
+        self.emulator = EmulatorManager(
+            window_title=self.config.get("emu_name"),
+            exe_path=self.config.get("emu_path")
+        )
+        self.detector = ResourceDetector()
+        self.scanner = SpiralScanner()
+        
+    def initialize(self):
+        """Initial check for emulator."""
+        logger.info("Initializing Bot...")
+        if not self.emulator.find_ldplayer_window():
+            logger.warning("LDPlayer not found. Attempting to launch...")
+            if not self.emulator.launch_emulator():
+                self.ui.add_log("CRITICAL: Could not find or launch LDPlayer.")
                 return False
-            
-            self.ui.signals.log_message.emit("LDPlayer window found.")
-            
-            # 2. Connect ADB
-            # Note: User needs to ensure ADB is enabled in LDPlayer settings
-            # self.emulator.connect_adb()
-            
-            # 3. Load Vision Templates
-            self.detector.load_templates()
-            self.ui.signals.log_message.emit(f"Loaded {len(self.detector.templates)} resource templates.")
-            
-            self.ui.signals.status_changed.emit("Ready")
-            self.ui.signals.log_message.emit("Bot is ready to start.")
-            return True
-        except Exception as e:
-            self.ui.signals.status_changed.emit("Init Error")
-            self.ui.signals.log_message.emit(f"ERROR during init: {str(e)}")
-            return False
+        
+        self.emulator.set_window_resolution(1600, 900)
+        self.ui.add_log("Bot Initialized. Ready to start.")
+        return True
 
     def start(self):
         if not self.running:
@@ -63,27 +53,26 @@ class LordsMobileBot:
             self.thread = threading.Thread(target=self.bot_loop, daemon=True)
             self.thread.start()
             self.ui.signals.status_changed.emit("Running")
+            logger.info("Bot Started")
 
     def stop(self):
         self.running = False
         self.ui.signals.status_changed.emit("Stopped")
+        logger.info("Bot Stopped")
 
     def bot_loop(self):
-        """Main automation logic."""
-        capturer = ScreenCapture(self.emulator.window_handle)
-        dispatcher = ArmyDispatcher(self.emulator)
-        
-        # 1. Wait for Game & Auto-Startup
-        self.ui.signals.log_message.emit("Starting Auto-Boot sequence...")
-        startup_complete = False
-        
-        while self.running:
-            if self.paused:
-                time.sleep(1)
-                continue
+        """Main automation logic with robust error handling."""
+        try:
+            capturer = ScreenCapture(self.emulator.window_handle)
+            dispatcher = ArmyDispatcher(self.emulator)
+            startup_complete = False
+            
+            while self.running:
+                if self.paused:
+                    time.sleep(1)
+                    continue
 
-            try:
-                # --- LIVE STREAM UPDATE ---
+                # 1. Capture and Stream
                 screen_img = capturer.capture_win32()
                 if screen_img is not None:
                     h, w, ch = screen_img.shape
@@ -91,128 +80,83 @@ class LordsMobileBot:
                     q_img = QImage(screen_img.data, w, h, bytes_per_line, QImage.Format.Format_BGR888)
                     self.ui.signals.new_frame.emit(q_img)
                 else:
-                    time.sleep(1)
+                    logger.error("Failed to capture screen.")
+                    time.sleep(2)
                     continue
 
-                # --- AUTO-STARTUP LOGIC ---
+                # 2. Auto-Startup Logic
                 if not startup_complete:
-                    # Check for "Base to Map" button
                     match = self.detector.detect_ui_button(screen_img, 'base_to_map')
                     if match:
-                        self.ui.signals.log_message.emit("Detected 'Go to Map' button. Clicking...")
+                        logger.info("Detected 'Go to Map' button.")
                         self.emulator.send_click(match['x'], match['y'])
                         time.sleep(5)
-                        
-                        # Go to Center (960, 537)
-                        self.ui.signals.log_message.emit("Opening Mini-Map to go to center...")
-                        # Assume mini-map button is at a fixed location or detected
-                        # Then click the center coordinates specified by user
-                        self.emulator.send_click(960, 537)
-                        self.ui.signals.log_message.emit("Navigated to world center (960, 537).")
+                        self.emulator.send_click(960, 537) # Go to center
                         startup_complete = True
                         self.ui.signals.status_changed.emit("Gathering Loop")
                     else:
-                        self.ui.signals.log_message.emit("Waiting for game to load or 'Go to Map' button...")
-                        time.sleep(3)
+                        time.sleep(2)
                         continue
 
-                # --- GATHERING LOOP ---
-                # 1. Update Dashboard with current tasks
+                # 3. Gathering Logic
                 active_tasks = self.db.get_all_active_tasks()
                 self.ui.signals.tasks_updated.emit(active_tasks)
 
-                # 2. Check for and clean up expired tasks
-                expired = self.db.get_expired_armies()
-                if expired:
-                    for army_id in expired:
-                        self.db.remove_army(army_id)
-                        self.ui.signals.log_message.emit(f"Army {army_id} finished gathering.")
-
-                # 3. Check for available army slots (max 6)
                 if len(active_tasks) < 6:
-                    # Get selected resources from UI
-                    selected_res = [res for res, cb in self.ui.res_checks.items() if cb.isChecked()]
-                    self.ui.signals.log_message.emit(f"Searching for: {', '.join(selected_res)}")
-                    
-                    # Detection & Dispatch
-                    match = self.detector.detect_best_resource(screen_img) # Priority logic inside
+                    selected_res = self.config.get("resources_to_gather", [])
+                    match = self.detector.detect_best_resource(screen_img)
                     if match:
                         res_type = match['name'].split('_')[0]
                         if res_type in selected_res:
-                            self.ui.signals.log_message.emit(f"Found {match['name']}! Dispatching army...")
+                            logger.info(f"Found {match['name']}. Dispatching...")
                             if dispatcher.dispatch_to_tile(match['x'], match['y'], self.detector, screen_img):
                                 army_id = len(active_tasks) + 1
-                                # Get custom duration from DB or default
-                                duration = 3600 # 1 hour default
-                                self.db.add_active_army(army_id, res_type, 5, duration, 0, 0)
-                                self.ui.signals.log_message.emit(f"Army {army_id} sent to {match['name']}.")
+                                # Get duration from config timers
+                                level = match['name'].split('_lv')[-1]
+                                duration = self.config.get("timers", {}).get(res_type, {}).get(level, 60) * 60
+                                self.db.add_active_army(army_id, res_type, int(level), duration, 0, 0)
                     else:
-                        # Move map if nothing found
-                        self.ui.signals.log_message.emit("No resources found. Moving map...")
-                        # scanner logic here
-                
-                # Human-like safety delay
+                        # Move map logic
+                        pass
+
                 Humanizer.sleep(2, 4)
 
-            except Exception as e:
-                self.ui.signals.log_message.emit(f"Runtime Error: {str(e)}")
-                time.sleep(5)
+        except Exception as e:
+            logger.exception("Fatal error in bot loop")
+            self.ui.add_log(f"FATAL ERROR: {str(e)}")
+            self.running = False
 
 def main():
-    app = QApplication(sys.argv)
-    dashboard = LiveDashboard()
-    bot = LordsMobileBot(dashboard)
-    
-    # Connect UI buttons to bot logic
-    dashboard.start_btn.clicked.connect(bot.start)
-    dashboard.stop_btn.clicked.connect(bot.stop)
-    dashboard.center_btn.clicked.connect(lambda: bot.emulator.send_click(960, 537))
-    
-    def save_timers():
-        for row in range(dashboard.timer_table.rowCount()):
-            res_type = dashboard.timer_table.item(row, 0).text()
-            level = int(dashboard.timer_table.item(row, 1).text())
-            minutes = int(dashboard.timer_table.item(row, 2).text())
-            bot.db.update_cooldown(res_type, level, minutes * 60)
-        dashboard.add_log("All timer settings saved to database.")
-
-    dashboard.save_timers_btn.clicked.connect(save_timers)
-    
-    # Load existing timers into UI
     try:
-        existing_timers = bot.db.get_all_cooldowns() if hasattr(bot.db, 'get_all_cooldowns') else []
-    except:
-        existing_timers = []
+        app = QApplication(sys.argv)
+        dashboard = LiveDashboard()
+        bot = LordsMobileBot(dashboard)
+        
+        # Connect UI
+        dashboard.start_btn.clicked.connect(bot.start)
+        dashboard.stop_btn.clicked.connect(bot.stop)
+        dashboard.center_btn.clicked.connect(lambda: bot.emulator.send_click(960, 537))
+        
+        # Load Config into UI
+        dashboard.emu_path_input.setText(bot.config.get("emu_path"))
+        dashboard.emu_name_input.setText(bot.config.get("emu_name"))
+        
+        def save_emu_settings():
+            bot.config.set("emu_path", dashboard.emu_path_input.text())
+            bot.config.set("emu_name", dashboard.emu_name_input.text())
+            bot.emulator.exe_path = bot.config.get("emu_path")
+            bot.emulator.window_title = bot.config.get("emu_name")
+            dashboard.add_log("Settings saved to config.json")
+            logger.info("Config updated")
 
-    if existing_timers:
-        for row_data in existing_timers:
-            for row in range(dashboard.timer_table.rowCount()):
-                if (dashboard.timer_table.item(row, 0).text() == row_data['resource_type'] and 
-                    dashboard.timer_table.item(row, 1).text() == str(row_data['resource_level'])):
-                    dashboard.timer_table.setItem(row, 2, QTableWidgetItem(str(row_data['duration_seconds'] // 60)))
+        dashboard.save_emu_settings_btn.clicked.connect(save_emu_settings)
 
-    # Load Emulator Settings
-    saved_path = bot.db.get_ui_setting('emu_path')
-    saved_name = bot.db.get_ui_setting('emu_name')
-    if saved_path: dashboard.emu_path_input.setText(saved_path)
-    if saved_name: dashboard.emu_name_input.setText(saved_name)
-    
-    def save_emu_settings():
-        path = dashboard.emu_path_input.text()
-        name = dashboard.emu_name_input.text()
-        bot.db.update_ui_setting('emu_path', path)
-        bot.db.update_ui_setting('emu_name', name)
-        bot.emulator.exe_path = path
-        bot.emulator.window_title = name
-        dashboard.add_log("Emulator settings saved.")
-
-    dashboard.save_emu_settings_btn.clicked.connect(save_emu_settings)
-
-    if bot.initialize():
-        dashboard.show()
-        sys.exit(app.exec())
-    else:
-        print("Bot failed to initialize.")
+        if bot.initialize():
+            dashboard.show()
+            sys.exit(app.exec())
+    except Exception as e:
+        logger.exception("Application failed to start")
+        print(f"Application Error: {e}")
 
 if __name__ == "__main__":
     main()

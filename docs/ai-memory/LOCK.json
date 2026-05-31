@@ -1,0 +1,7 @@
+{
+  "current_module": "ai-memory",
+  "allowed_changes": ["docs/ai-memory/"],
+  "blocked_changes": ["core/", "scanner/", "vision/", "dispatch/"],
+  "memory_version": "1.0",
+  "last_updated": "2026-06-01"
+}

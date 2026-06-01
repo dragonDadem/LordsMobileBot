@@ -16,6 +16,10 @@ from safety.humanizer import Humanizer
 from ui.dashboard import LiveDashboard
 from core.config import ConfigManager
 from core.logger import logger
+from guild.guild_manager import GuildManager
+from combat.monster_hunter import MonsterHunter
+from safety.protection import ProtectionSystem
+from resources.resource_manager import ResourceManager
 
 class LordsMobileBot:
     def __init__(self, ui):
@@ -32,6 +36,10 @@ class LordsMobileBot:
         )
         self.detector = ResourceDetector()
         self.scanner = SpiralScanner()
+        self.guild = GuildManager(self.emulator, self.detector)
+        self.combat = MonsterHunter(self.emulator, self.detector)
+        self.protection = ProtectionSystem(self.emulator, self.detector)
+        self.resources = ResourceManager(self.emulator, self.detector)
         
     def initialize(self):
         """Initial check for emulator."""
@@ -83,6 +91,25 @@ class LordsMobileBot:
                     logger.error("Failed to capture screen.")
                     time.sleep(2)
                     continue
+
+                # 1.4 Security Check (Highest Priority)
+                if self.ui.auto_shield_cb.isChecked():
+                    if self.protection.check_for_threats(screen_img):
+                        # Pause other tasks if under attack
+                        continue
+
+                # 1.5 Guild Help (Pro Feature)
+                if self.ui.guild_help_cb.isChecked():
+                    self.guild.check_and_help(screen_img)
+                
+                # 1.6 Monster Hunting (Pro Feature)
+                if self.ui.monster_hunt_cb.isChecked():
+                    self.combat.hunt_nearby_monster(screen_img)
+                
+                # 1.7 Resource Management (Pro Feature)
+                if self.ui.auto_resource_cb.isChecked():
+                    # Check every 10 minutes or so
+                    pass
 
                 # 2. Auto-Startup Logic
                 if not startup_complete:

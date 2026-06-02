@@ -4,6 +4,7 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QLabel, QTableWidget, QTableWidgetItem, 
                              QHeaderView, QTabWidget, QGroupBox, QGridLayout, 
                              QCheckBox, QLineEdit, QFileDialog, QStatusBar)
+from ui.template_manager import TemplateManagerTab
 from PyQt6.QtCore import Qt, pyqtSignal, QObject
 from PyQt6.QtGui import QImage, QPixmap
 
@@ -64,10 +65,9 @@ class LiveDashboard(QMainWindow):
         self._setup_dashboard_tab()
         self.tabs.addTab(self.dashboard_tab, "Dashboard")
 
-        # Tab 2: Image Management
-        self.image_tab = QWidget()
-        self._setup_image_tab()
-        self.tabs.addTab(self.image_tab, "Images & Templates")
+        # Tab 2: Template Manager (New Dynamic System)
+        self.template_manager = TemplateManagerTab()
+        self.tabs.addTab(self.template_manager, "Template Manager")
 
         # Tab 3: Timer Settings
         self.timer_tab = QWidget()

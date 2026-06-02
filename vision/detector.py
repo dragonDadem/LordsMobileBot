@@ -1,47 +1,55 @@
 import cv2
 import numpy as np
 import os
+import json
+from core.logger import logger
 
 class ResourceDetector:
     """
-    Module 3: Resource Detection Engine (Enhanced)
-    Detects resource tiles and UI buttons using image-based detection.
+    Module 3: Resource Detection Engine (Dynamic)
+    Uses metadata from TemplateEngine to detect resources and UI elements.
     """
-    def __init__(self, templates_dir='assets/templates', ui_dir='assets/ui'):
-        self.templates_dir = templates_dir
-        self.ui_dir = ui_dir
-        self.templates = {}    # { 'Gold_lv5': [img1, img2], ... }
-        self.ui_templates = {} # { 'auto_select': img, ... }
+    def __init__(self, metadata_path='assets/templates/templates.json'):
+        self.metadata_path = metadata_path
+        self.templates = {}    # { 'gold_lv5': [img], ... }
+        self.ui_templates = {} # { 'boost_menu': img, ... }
+        self.load_templates()
         
     def load_templates(self):
-        """Load all resource and UI templates from their respective directories."""
+        """Load all templates based on the metadata JSON."""
         self.templates = {}
         self.ui_templates = {}
-
-        # Load Resource Templates
-        if os.path.exists(self.templates_dir):
-            for filename in os.listdir(self.templates_dir):
-                if filename.endswith(".png") and "_" in filename:
-                    name_parts = filename.replace(".png", "").split("_")
-                    base_name = "_".join(name_parts[:2]) # e.g., Gold_lv5
-                    path = os.path.join(self.templates_dir, filename)
-                    template = cv2.imread(path)
-                    if template is not None:
-                        if base_name not in self.templates:
-                            self.templates[base_name] = []
-                        self.templates[base_name].append(template)
-
-        # Load UI Button Templates
-        if os.path.exists(self.ui_dir):
-            for filename in os.listdir(self.ui_dir):
-                if filename.endswith(".png"):
-                    key = filename.replace(".png", "")
-                    path = os.path.join(self.ui_dir, filename)
-                    img = cv2.imread(path)
-                    if img is not None:
-                        self.ui_templates[key] = img
         
-        print(f"Loaded {len(self.templates)} resources and {len(self.ui_templates)} UI buttons.")
+        if not os.path.exists(self.metadata_path):
+            logger.warning("No template metadata found. Template Manager needs to save templates first.")
+            return
+
+        try:
+            with open(self.metadata_path, 'r') as f:
+                metadata = json.load(f)
+                
+            for entry in metadata:
+                path = entry['path']
+                key = entry['key']
+                itype = entry['type']
+                
+                if not os.path.exists(path):
+                    continue
+                    
+                img = cv2.imread(path)
+                if img is None:
+                    continue
+                    
+                if itype == "Resource":
+                    if key not in self.templates:
+                        self.templates[key] = []
+                    self.templates[key].append(img)
+                else:
+                    self.ui_templates[key] = img
+                    
+            logger.info(f"Detector loaded {len(self.templates)} resources and {len(self.ui_templates)} UI elements.")
+        except Exception as e:
+            logger.error(f"Error loading templates in detector: {e}")
 
     def match_template_multi_scale(self, screen_img, template, threshold=0.8):
         """Multi-scale template matching to handle variations."""
@@ -77,9 +85,8 @@ class ResourceDetector:
     def detect_best_resource(self, screen_img, priority_list=None):
         """Scan for resources based on priority."""
         if priority_list is None:
-            types = ['Gold', 'Ore', 'Wood', 'Stone', 'Food']
-            levels = [5, 4, 3, 2, 1]
-            priority_list = [f"{t}_lv{l}" for l in levels for t in types]
+            # Default priority if none provided
+            priority_list = list(self.templates.keys())
 
         for res_name in priority_list:
             if res_name in self.templates:

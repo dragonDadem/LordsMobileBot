@@ -15,6 +15,7 @@ from storage.database import BotDatabase
 from safety.humanizer import Humanizer
 from ui.dashboard import LiveDashboard
 from core.config import ConfigManager
+from core.template_engine import TemplateEngine
 from core.logger import logger
 from guild.guild_manager import GuildManager
 from combat.monster_hunter import MonsterHunter
@@ -35,6 +36,7 @@ class LordsMobileBot:
             exe_path=self.config.get("emu_path")
         )
         self.detector = ResourceDetector()
+        self.template_engine = TemplateEngine()
         self.scanner = SpiralScanner()
         self.guild = GuildManager(self.emulator, self.detector)
         self.combat = MonsterHunter(self.emulator, self.detector)
@@ -177,6 +179,21 @@ def main():
             logger.info("Config updated")
 
         dashboard.save_emu_settings_btn.clicked.connect(save_emu_settings)
+
+        # Connect Template Manager
+        def load_templates_to_ui():
+            for t in bot.template_engine.templates:
+                bot.ui.template_manager.add_row(t['name'], t['path'], t['type'])
+        
+        def save_all_templates():
+            ui_data = bot.ui.template_manager.get_all_data()
+            for item in ui_data:
+                bot.template_engine.save_template(item['name'], item['type'], item['path'])
+            bot.detector.load_templates() # Reload in detector
+            bot.ui.add_log("All templates saved and reloaded.")
+
+        load_templates_to_ui()
+        dashboard.template_manager.save_btn.clicked.connect(save_all_templates)
 
         if bot.initialize():
             dashboard.show()

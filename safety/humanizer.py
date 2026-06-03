@@ -26,6 +26,11 @@ class Humanizer:
         return base_delay + random.uniform(-variation, variation)
 
     @staticmethod
+    def get_random_swipe_duration(base=500):
+        """Varies swipe duration."""
+        return base + random.randint(-100, 200)
+
+    @staticmethod
     def jitter_swipe(x1, y1, x2, y2):
         """Add slight variations to swipe start/end points."""
         rx1, ry1 = Humanizer.randomize_point(x1, y1, radius=10)

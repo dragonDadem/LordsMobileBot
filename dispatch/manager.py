@@ -41,7 +41,7 @@ class ArmyDispatcher:
             time.sleep(random.uniform(1.2, 1.8))
 
             # Sequence of buttons to click
-            button_keys = ['deploy_gather', 'auto_select', 'deploy_gather']
+            button_keys = ['deploy_btn', 'auto_select', 'deploy_btn']
             
             for key in button_keys:
                 clicked = False

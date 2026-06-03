@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+logs/*.log
+storage/*.db
+assets/templates/ui/*
+assets/templates/resources/*
+assets/templates/shield/*
+assets/templates/templates.json
+config.json

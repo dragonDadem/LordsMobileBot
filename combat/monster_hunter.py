@@ -8,22 +8,39 @@ class MonsterHunter:
         self.emulator = emulator_manager
         self.detector = detector
 
-    def hunt_nearby_monster(self, screen_img):
+    def hunt_nearby_monster(self, capturer):
         """
         Scan for monsters on the screen and initiate attack.
-        Requires monster templates and 'attack_button', 'hunt_button'.
+        Requires monster templates and 'hunt_button', 'attack_button'.
         """
+        screen_img = capturer.capture_win32()
+        if screen_img is None: return False
+
         # 1. Detect any monster on screen
-        # Note: In a real scenario, you'd have templates for different monster types
         match = self.detector.detect_ui_button(screen_img, 'monster_template')
         if match:
             logger.info(f"Monster detected at ({match['x']}, {match['y']}).")
             self.emulator.send_click(match['x'], match['y'])
-            time.sleep(random.uniform(1.5, 2.0))
+            time.sleep(random.uniform(2.0, 2.5))
             
-            # 2. Click Attack/Hunt button
-            # This logic would be expanded to handle the attack sequence
-            return True
+            # 2. Click Hunt button
+            screen_img = capturer.capture_win32()
+            if screen_img is None: return False
+            match = self.detector.detect_ui_button(screen_img, 'hunt_button')
+            if match:
+                logger.info("Clicking Hunt button...")
+                self.emulator.send_click(match['x'], match['y'])
+                time.sleep(random.uniform(1.5, 2.0))
+
+                # 3. Click Attack button
+                screen_img = capturer.capture_win32()
+                if screen_img is None: return False
+                match = self.detector.detect_ui_button(screen_img, 'attack_button')
+                if match:
+                    logger.info("Executing Monster Attack!")
+                    self.emulator.send_click(match['x'], match['y'])
+                    time.sleep(random.uniform(1.0, 1.5))
+                    return True
         return False
 
     def check_energy(self, screen_img):

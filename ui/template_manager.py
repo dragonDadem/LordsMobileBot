@@ -89,6 +89,12 @@ class TemplateRow(QFrame):
         pixmap = QPixmap(path)
         self.preview_label.setPixmap(pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
 
+    def set_active(self, active=True):
+        if active:
+            self.setStyleSheet("TemplateRow { background-color: #2c3e50; border: 2px solid #3498db; }")
+        else:
+            self.setStyleSheet("TemplateRow { background-color: #f8f9fa; border: 1px solid #dee2e6; }")
+
 class TemplateManagerTab(QWidget):
     def __init__(self):
         super().__init__()
@@ -98,7 +104,7 @@ class TemplateManagerTab(QWidget):
         main_layout = QVBoxLayout(self)
         
         # Title and Description
-        title = QLabel("Professional Template Manager")
+        title = QLabel("Elite Template Manager & Trainer")
         title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         title.setStyleSheet("color: #2c3e50; margin-top: 10px;")
         main_layout.addWidget(title)
@@ -121,6 +127,11 @@ class TemplateManagerTab(QWidget):
         # Pre-populate all required items
         self._populate_required_items()
         
+        # Live Preview Mode
+        self.live_preview_cb = QCheckBox("ENABLE LIVE TEMPLATE VERIFICATION (Highlights matches on Dashboard)")
+        self.live_preview_cb.setStyleSheet("font-weight: bold; color: #e67e22; margin: 10px;")
+        main_layout.addWidget(self.live_preview_cb)
+
         # Footer Actions
         footer = QHBoxLayout()
         self.save_btn = QPushButton("💾 SAVE & APPLY ALL TEMPLATES")
@@ -154,6 +165,7 @@ class TemplateManagerTab(QWidget):
         self._add_section_header("🎮 ESSENTIAL UI BUTTONS")
         buttons = [
             ("Exit to World Map", "exit_to_map"),
+            ("Base to Map Button", "base_to_map"),
             ("Open Map Search", "open_map"),
             ("Close Map/Panel", "close_panel"),
             ("Auto-Select Army", "auto_select"),
@@ -164,11 +176,33 @@ class TemplateManagerTab(QWidget):
         for name, key in buttons:
             self.add_row(name, "", "UI Button", key)
 
+        # Category: Guild & Gifts
+        self._add_section_header("🤝 GUILD & GIFTS")
+        guild_items = [
+            ("Guild Icon", "guild_icon"),
+            ("Guild Help Icon", "guild_help"),
+            ("Gift Tab", "gift_tab"),
+            ("Claim All Gifts", "claim_all")
+        ]
+        for name, key in guild_items:
+            self.add_row(name, "", "Guild Task", key)
+
+        # Category: Monster Hunting
+        self._add_section_header("⚔️ MONSTER HUNTING")
+        hunt_items = [
+            ("Monster Template", "monster_template"),
+            ("Hunt Button", "hunt_button"),
+            ("Attack Button", "attack_button"),
+            ("Attack Alert (Red)", "attack_alert")
+        ]
+        for name, key in hunt_items:
+            self.add_row(name, "", "Combat Task", key)
+
         # Category: Shield System
         self._add_section_header("🛡️ SHIELD SYSTEM (24h)")
         shields = [
             ("Boost Menu Icon", "boost_menu"),
-            ("24h Shield Icon", "shield_24h"),
+            ("24h Shield Item", "shield_24h_item"),
             ("Confirm Shield Button", "confirm_shield")
         ]
         for name, key in shields:

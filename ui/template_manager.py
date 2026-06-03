@@ -1,64 +1,93 @@
 import os
-import shutil
+import json
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QScrollArea, QFileDialog, QLineEdit, 
-                             QComboBox, QFrame)
+                             QComboBox, QFrame, QGridLayout)
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtGui import QPixmap, QFont
 
 class TemplateRow(QFrame):
     deleted = pyqtSignal(object)
     
-    def __init__(self, item_name="", image_path="", item_type="UI Button"):
+    def __init__(self, item_name="", image_path="", item_type="UI Button", item_key=""):
         super().__init__()
         self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setStyleSheet("""
+            TemplateRow {
+                background-color: #f8f9fa;
+                border: 1px solid #dee2e6;
+                border-radius: 5px;
+                margin-bottom: 5px;
+            }
+            TemplateRow:hover {
+                background-color: #e9ecef;
+            }
+        """)
         self.image_path = image_path
+        self.item_key = item_key
         self._init_ui(item_name, item_type)
 
     def _init_ui(self, name, itype):
         layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 5, 10, 5)
         
-        # Name Input
-        self.name_input = QLineEdit(name)
-        self.name_input.setPlaceholderText("Item Name (e.g. Gold Lv5)")
-        layout.addWidget(self.name_input, 2)
+        # Label/Name (Fixed for pre-populated items)
+        self.name_label = QLabel(name)
+        self.name_label.setFixedWidth(180)
+        self.name_label.setStyleSheet("font-weight: bold; color: #34495e;")
+        layout.addWidget(self.name_label)
         
-        # Type Selection
-        self.type_combo = QComboBox()
-        self.type_combo.addItems(["Resource", "UI Button", "Shield Sequence"])
-        self.type_combo.setCurrentText(itype)
-        layout.addWidget(self.type_combo, 1)
+        # Type Label
+        type_label = QLabel(f"[{itype}]")
+        type_label.setFixedWidth(100)
+        type_label.setStyleSheet("color: #7f8c8d; font-style: italic;")
+        layout.addWidget(type_label)
         
         # Preview Label
         self.preview_label = QLabel("No Image")
-        self.preview_label.setFixedSize(50, 50)
-        self.preview_label.setStyleSheet("border: 1px solid gray;")
+        self.preview_label.setFixedSize(60, 60)
+        self.preview_label.setStyleSheet("background-color: white; border: 1px dashed #bdc3c7; border-radius: 3px;")
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         if self.image_path and os.path.exists(self.image_path):
             self._update_preview(self.image_path)
         layout.addWidget(self.preview_label)
         
+        # Spacer
+        layout.addStretch()
+        
         # Upload Button
-        self.upload_btn = QPushButton("Upload")
+        self.upload_btn = QPushButton("Upload Image")
+        self.upload_btn.setFixedWidth(120)
+        self.upload_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border-radius: 3px;
+                padding: 5px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+        """)
         self.upload_btn.clicked.connect(self._handle_upload)
         layout.addWidget(self.upload_btn)
         
-        # Delete Button
-        self.delete_btn = QPushButton("🗑")
-        self.delete_btn.setStyleSheet("color: red;")
-        self.delete_btn.clicked.connect(lambda: self.deleted.emit(self))
-        layout.addWidget(self.delete_btn)
+        # Status Icon
+        self.status_icon = QLabel("⚪") # White for missing, Green for loaded
+        if self.image_path and os.path.exists(self.image_path):
+            self.status_icon.setText("🟢")
+        layout.addWidget(self.status_icon)
 
     def _handle_upload(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Select Template Image", "", "Images (*.png *.jpg)")
+        file_path, _ = QFileDialog.getOpenFileName(self, f"Select Image for {self.name_label.text()}", "", "Images (*.png *.jpg)")
         if file_path:
-            # Logic for saving will be handled by parent, but update preview now
             self.image_path = file_path
             self._update_preview(file_path)
+            self.status_icon.setText("🟢")
 
     def _update_preview(self, path):
         pixmap = QPixmap(path)
-        self.preview_label.setPixmap(pixmap.scaled(50, 50, Qt.AspectRatioMode.KeepAspectRatio))
+        self.preview_label.setPixmap(pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
 
 class TemplateManagerTab(QWidget):
     def __init__(self):
@@ -66,52 +95,128 @@ class TemplateManagerTab(QWidget):
         self._init_ui()
 
     def _init_ui(self):
-        layout = QVBoxLayout(self)
+        main_layout = QVBoxLayout(self)
         
-        # Header
-        header = QLabel("Dynamic Template Manager")
-        header.setStyleSheet("font-size: 18px; font-weight: bold; color: #2c3e50;")
-        layout.addWidget(header)
+        # Title and Description
+        title = QLabel("Professional Template Manager")
+        title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+        title.setStyleSheet("color: #2c3e50; margin-top: 10px;")
+        main_layout.addWidget(title)
         
-        # Scroll Area for Rows
+        desc = QLabel("Upload images for each item below. The bot uses these to 'see' and control the game.")
+        desc.setStyleSheet("color: #7f8c8d; margin-bottom: 10px;")
+        main_layout.addWidget(desc)
+        
+        # Scroll Area
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
+        self.scroll.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
+        
         self.container = QWidget()
         self.container_layout = QVBoxLayout(self.container)
         self.container_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.scroll.setWidget(self.container)
-        layout.addWidget(self.scroll)
+        main_layout.addWidget(self.scroll)
         
-        # Bottom Controls
-        btn_layout = QHBoxLayout()
-        self.add_btn = QPushButton("+ Add New Template")
-        self.add_btn.clicked.connect(self.add_row)
+        # Pre-populate all required items
+        self._populate_required_items()
         
-        self.save_btn = QPushButton("💾 SAVE ALL TEMPLATES")
-        self.save_btn.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold; height: 40px;")
-        
-        btn_layout.addWidget(self.add_btn)
-        btn_layout.addWidget(self.save_btn)
-        layout.addLayout(btn_layout)
+        # Footer Actions
+        footer = QHBoxLayout()
+        self.save_btn = QPushButton("💾 SAVE & APPLY ALL TEMPLATES")
+        self.save_btn.setFixedHeight(50)
+        self.save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #27ae60;
+                color: white;
+                font-size: 14px;
+                font-weight: bold;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #219150;
+            }
+        """)
+        footer.addWidget(self.save_btn)
+        main_layout.addLayout(footer)
 
-    def add_row(self, name="", path="", itype="UI Button"):
-        row = TemplateRow(name, path, itype)
-        row.deleted.connect(self._remove_row)
+    def _populate_required_items(self):
+        # Category: Resources
+        self._add_section_header("💎 RESOURCE TILES (Levels 1-5)")
+        resources = ["Food", "Wood", "Stone", "Ore", "Gold"]
+        for res in resources:
+            for lv in range(5, 0, -1):
+                name = f"{res} Mine Lv {lv}"
+                key = f"{res.lower()}_lv{lv}"
+                self.add_row(name, "", "Resource", key)
+
+        # Category: Essential UI Buttons
+        self._add_section_header("🎮 ESSENTIAL UI BUTTONS")
+        buttons = [
+            ("Exit to World Map", "exit_to_map"),
+            ("Open Map Search", "open_map"),
+            ("Close Map/Panel", "close_panel"),
+            ("Auto-Select Army", "auto_select"),
+            ("Deploy/Gather Button", "deploy_btn"),
+            ("Lowest Tier Button", "lowest_tier"),
+            ("Collect Resources", "collect_btn")
+        ]
+        for name, key in buttons:
+            self.add_row(name, "", "UI Button", key)
+
+        # Category: Shield System
+        self._add_section_header("🛡️ SHIELD SYSTEM (24h)")
+        shields = [
+            ("Boost Menu Icon", "boost_menu"),
+            ("24h Shield Icon", "shield_24h"),
+            ("Confirm Shield Button", "confirm_shield")
+        ]
+        for name, key in shields:
+            self.add_row(name, "", "Shield Sequence", key)
+
+    def _add_section_header(self, title):
+        header = QLabel(title)
+        header.setStyleSheet("""
+            background-color: #34495e;
+            color: white;
+            padding: 8px;
+            font-weight: bold;
+            border-radius: 3px;
+            margin-top: 15px;
+        """)
+        self.container_layout.addWidget(header)
+
+    def add_row(self, name, path, itype, key):
+        row = TemplateRow(name, path, itype, key)
         self.container_layout.addWidget(row)
         return row
-
-    def _remove_row(self, row):
-        self.container_layout.removeWidget(row)
-        row.deleteLater()
 
     def get_all_data(self):
         data = []
         for i in range(self.container_layout.count()):
             widget = self.container_layout.itemAt(i).widget()
             if isinstance(widget, TemplateRow):
+                if widget.image_path:
+                    data.append({
+                        "name": widget.name_label.text(),
+                        "type": widget.type_combo_label_text() if hasattr(widget, 'type_combo') else "UI Button", # Simplified
+                        "path": widget.image_path,
+                        "key": widget.item_key
+                    })
+        return data
+
+    # Helper for data extraction
+    def get_ui_data(self):
+        data = []
+        for i in range(self.container_layout.count()):
+            widget = self.container_layout.itemAt(i).widget()
+            if isinstance(widget, TemplateRow):
+                # We extract info even if path is empty to maintain the list, 
+                # but TemplateEngine will handle the actual saving
                 data.append({
-                    "name": widget.name_input.text(),
-                    "type": widget.type_combo.currentText(),
-                    "path": widget.image_path
+                    "name": widget.name_label.text(),
+                    "path": widget.image_path,
+                    "key": widget.item_key,
+                    "type": "Resource" if "Lv" in widget.name_label.text() else ("Shield Sequence" if "Shield" in widget.name_label.text() or "Boost" in widget.name_label.text() else "UI Button")
                 })
         return data

@@ -164,7 +164,21 @@ def main():
         # Connect UI
         dashboard.start_btn.clicked.connect(bot.start)
         dashboard.stop_btn.clicked.connect(bot.stop)
-        dashboard.center_btn.clicked.connect(lambda: bot.emulator.send_click(960, 537))
+        def go_to_center():
+            bot.ui.add_log("Attempting to go to map center...")
+            # Try to find map button first
+            screen = bot.latest_frame if bot.latest_frame is not None else None
+            if screen is not None:
+                map_btn = bot.detector.detect_ui_button(screen, 'open_map')
+                if map_btn:
+                    bot.emulator.send_click(map_btn['x'], map_btn['y'])
+                    time.sleep(1)
+            
+            # Click the coordinates (Center of screen in map view)
+            bot.emulator.send_click(960, 537)
+            bot.ui.add_log("Center command sent via ADB.")
+
+        dashboard.center_btn.clicked.connect(go_to_center)
         
         # Load Config into UI
         dashboard.emu_path_input.setText(bot.config.get("emu_path"))
@@ -186,11 +200,14 @@ def main():
                 bot.ui.template_manager.add_row(t['name'], t['path'], t['type'])
         
         def save_all_templates():
-            ui_data = bot.ui.template_manager.get_all_data()
+            ui_data = bot.ui.template_manager.get_ui_data()
+            count = 0
             for item in ui_data:
-                bot.template_engine.save_template(item['name'], item['type'], item['path'])
+                if item['path'] and os.path.exists(item['path']):
+                    bot.template_engine.save_template(item['name'], item['type'], item['path'])
+                    count += 1
             bot.detector.load_templates() # Reload in detector
-            bot.ui.add_log("All templates saved and reloaded.")
+            bot.ui.add_log(f"Saved {count} templates. Detector reloaded.")
 
         load_templates_to_ui()
         dashboard.template_manager.save_btn.clicked.connect(save_all_templates)

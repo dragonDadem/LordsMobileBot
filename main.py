@@ -42,6 +42,7 @@ class LordsMobileBot:
         self.combat = MonsterHunter(self.emulator, self.detector)
         self.protection = ProtectionSystem(self.emulator, self.detector)
         self.resources = ResourceManager(self.emulator, self.detector)
+        self.last_gift_collection = 0
         
     def initialize(self):
         """Initial check for emulator."""
@@ -74,6 +75,7 @@ class LordsMobileBot:
         """Main automation logic with robust error handling."""
         try:
             capturer = ScreenCapture(self.emulator.window_handle)
+            self.capturer = capturer # Store for access if needed
             dispatcher = ArmyDispatcher(self.emulator)
             startup_complete = False
             
@@ -96,17 +98,23 @@ class LordsMobileBot:
 
                 # 1.4 Security Check (Highest Priority)
                 if self.ui.auto_shield_cb.isChecked():
-                    if self.protection.check_for_threats(screen_img):
+                    if self.protection.check_for_threats(capturer):
                         # Pause other tasks if under attack
                         continue
 
-                # 1.5 Guild Help (Pro Feature)
+                # 1.5 Guild Tasks (Pro Feature)
                 if self.ui.guild_help_cb.isChecked():
-                    self.guild.check_and_help(screen_img)
+                    self.guild.check_and_help(capturer)
                 
+                if self.ui.guild_gift_cb.isChecked():
+                    # Collect gifts every 30 mins
+                    if time.time() - self.last_gift_collection > 1800:
+                        if self.guild.collect_gifts(capturer):
+                            self.last_gift_collection = time.time()
+
                 # 1.6 Monster Hunting (Pro Feature)
                 if self.ui.monster_hunt_cb.isChecked():
-                    self.combat.hunt_nearby_monster(screen_img)
+                    self.combat.hunt_nearby_monster(capturer)
                 
                 # 1.7 Resource Management (Pro Feature)
                 if self.ui.auto_resource_cb.isChecked():
@@ -127,7 +135,12 @@ class LordsMobileBot:
                         time.sleep(2)
                         continue
 
-                # 3. Gathering Logic
+                # 3. Gathering Logic & Task Management
+                expired_ids = self.db.get_expired_armies()
+                for eid in expired_ids:
+                    logger.info(f"Army {eid} has returned. Freeing slot.")
+                    self.db.remove_army(eid)
+
                 active_tasks = self.db.get_all_active_tasks()
                 self.ui.signals.tasks_updated.emit(active_tasks)
 
@@ -139,14 +152,26 @@ class LordsMobileBot:
                         if res_type in selected_res:
                             logger.info(f"Found {match['name']}. Dispatching...")
                             if dispatcher.dispatch_to_tile(match['x'], match['y'], self.detector, screen_img):
-                                army_id = len(active_tasks) + 1
-                                # Get duration from config timers
+                                # Assign next available army ID (1-6)
+                                used_ids = [t['army_id'] for t in active_tasks]
+                                army_id = 1
+                                for i in range(1, 7):
+                                    if i not in used_ids:
+                                        army_id = i
+                                        break
+
                                 level = match['name'].split('_lv')[-1]
                                 duration = self.config.get("timers", {}).get(res_type, {}).get(level, 60) * 60
                                 self.db.add_active_army(army_id, res_type, int(level), duration, 0, 0)
+                                self.scanner.reset() # Reset scanner on success
                     else:
-                        # Move map logic
-                        pass
+                        # Move map logic using SpiralScanner
+                        next_pos = self.scanner.get_next_grid_pos()
+                        logger.info(f"No resources found. Moving to next spiral position: {next_pos}")
+                        # In a real bot, we'd calculate swipe vector, but for now we simulate coordinate entry
+                        # if the game allows direct coordinate entry. Otherwise, swipe:
+                        self.emulator.send_swipe(1200, 450, 400, 450, 1000) # Simple horizontal swipe
+                        time.sleep(2)
 
                 Humanizer.sleep(2, 4)
 

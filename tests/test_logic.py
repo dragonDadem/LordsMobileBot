@@ -72,5 +72,21 @@ class TestBotLogic(unittest.TestCase):
         self.assertTrue(ps.shield_active)
         self.assertEqual(self.mock_emulator.send_click.call_count, 3)
 
+    def test_threat_detection(self):
+        ps = ProtectionSystem(self.mock_emulator, self.mock_detector)
+        dummy_screen = np.zeros((900, 1600, 3), dtype=np.uint8)
+
+        # 1. Attack alert detected -> triggers shield
+        self.mock_detector.detect_ui_button.side_effect = [
+            {'x': 50, 'y': 50},  # attack_alert
+            {'x': 10, 'y': 10},  # boost_menu
+            {'x': 20, 'y': 20},  # shield_24h_item
+            {'x': 30, 'y': 30}   # confirm_shield
+        ]
+
+        result = ps.check_for_threats(dummy_screen, self.mock_capturer)
+        self.assertTrue(result)
+        self.assertTrue(ps.shield_active)
+
 if __name__ == '__main__':
     unittest.main()

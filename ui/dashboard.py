@@ -12,15 +12,34 @@ class DashboardSignals(QObject):
     new_frame = pyqtSignal(QImage)
     status_changed = pyqtSignal(str)
     tasks_updated = pyqtSignal(list)
+    stats_updated = pyqtSignal(dict)
 
 class LiveDashboard(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Lords Mobile Bot - Pro Version")
-        self.setMinimumSize(1000, 700)
+        self.setWindowTitle("Lords Mobile Bot - Elite Platform")
+        self.setMinimumSize(1200, 800)
         self.signals = DashboardSignals()
+        self._apply_dark_theme()
         self._init_ui()
         self._connect_signals()
+
+    def _apply_dark_theme(self):
+        self.setStyleSheet("""
+            QMainWindow { background-color: #1e1e1e; }
+            QWidget { color: #dcdcdc; font-family: 'Segoe UI', Arial; }
+            QTabWidget::pane { border: 1px solid #333; }
+            QTabBar::tab { background: #2d2d2d; padding: 12px 20px; color: #aaa; }
+            QTabBar::tab:selected { background: #3d3d3d; border-bottom: 3px solid #3498db; color: white; }
+            QPushButton { background-color: #333; border: 1px solid #555; border-radius: 4px; padding: 8px; color: white; }
+            QPushButton:hover { background-color: #444; border: 1px solid #3498db; }
+            QTableWidget { background-color: #252525; gridline-color: #333; border: none; color: #dcdcdc; }
+            QGroupBox { font-weight: bold; border: 1px solid #444; margin-top: 1.5ex; padding-top: 10px; color: #3498db; }
+            QHeaderView::section { background-color: #333; color: white; border: 1px solid #444; padding: 5px; }
+            QLineEdit { background-color: #2d2d2d; border: 1px solid #444; color: white; padding: 5px; }
+            QCheckBox { spacing: 10px; }
+            QCheckBox::indicator { width: 18px; height: 18px; }
+        """)
 
     def _init_ui(self):
         main_widget = QWidget()
@@ -143,19 +162,34 @@ class LiveDashboard(QMainWindow):
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
 
+        # Statistics Dashboard
+        stats_group = QGroupBox("Live Statistics")
+        stats_layout = QGridLayout()
+        self.stat_labels = {
+            "uptime": QLabel("Uptime: 00:00:00"),
+            "resources": QLabel("Resources: 0"),
+            "monsters": QLabel("Monsters: 0"),
+            "helps": QLabel("Guild Helps: 0")
+        }
+        for i, (key, lbl) in enumerate(self.stat_labels.items()):
+            lbl.setStyleSheet("font-size: 14px; font-weight: bold; color: #ecf0f1;")
+            stats_layout.addWidget(lbl, i // 2, i % 2)
+        stats_group.setLayout(stats_layout)
+        right_layout.addWidget(stats_group)
+
         # Task Table
         table_label = QLabel("ACTIVE GATHERING TASKS")
-        table_label.setStyleSheet("font-weight: bold; color: #2980b9;")
+        table_label.setStyleSheet("font-weight: bold; color: #3498db; margin-top: 10px;")
         right_layout.addWidget(table_label)
         
         self.task_table = QTableWidget(0, 5)
-        self.task_table.setHorizontalHeaderLabels(["Army", "Resource", "Level", "Location", "Time Left"])
+        self.task_table.setHorizontalHeaderLabels(["Army", "Resource", "Level", "Location", "Status"])
         self.task_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         right_layout.addWidget(self.task_table)
 
         # Simple Log Console
         log_label = QLabel("EVENT LOG")
-        log_label.setStyleSheet("font-weight: bold; color: #2980b9;")
+        log_label.setStyleSheet("font-weight: bold; color: #3498db; margin-top: 10px;")
         right_layout.addWidget(log_label)
         
         self.log_console = QTableWidget(0, 1)
@@ -233,6 +267,7 @@ class LiveDashboard(QMainWindow):
         self.signals.new_frame.connect(self._update_screen)
         self.signals.status_changed.connect(self._update_status)
         self.signals.tasks_updated.connect(self._update_tasks)
+        self.signals.stats_updated.connect(self._update_stats)
 
     def _update_screen(self, q_img):
         pixmap = QPixmap.fromImage(q_img)
@@ -249,6 +284,13 @@ class LiveDashboard(QMainWindow):
             self.task_table.setItem(i, 2, QTableWidgetItem(str(task['resource_level'])))
             self.task_table.setItem(i, 3, QTableWidgetItem(f"{task['map_x']}, {task['map_y']}"))
             self.task_table.setItem(i, 4, QTableWidgetItem("Active"))
+
+    def _update_stats(self, stats):
+        self.stat_labels["uptime"].setText(f"Uptime: {stats['uptime']}")
+        total_res = sum(stats['resources'].values())
+        self.stat_labels["resources"].setText(f"Resources: {total_res}")
+        self.stat_labels["monsters"].setText(f"Monsters: {stats['monsters']}")
+        self.stat_labels["helps"].setText(f"Guild Helps: {stats['helps']}")
 
     def add_log(self, message):
         row = self.log_console.rowCount()

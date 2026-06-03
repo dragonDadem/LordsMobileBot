@@ -9,9 +9,8 @@ class ProtectionSystem:
         self.detector = detector
         self.shield_active = False
 
-    def check_for_threats(self, capturer):
-        """Detect incoming rallies or solo attacks."""
-        screen_img = capturer.capture_win32()
+    def check_for_threats(self, screen_img, capturer):
+        """Detect incoming rallies or solo attacks using current frame."""
         if screen_img is None: return False
 
         match = self.detector.detect_ui_button(screen_img, 'attack_alert')

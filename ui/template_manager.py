@@ -89,6 +89,12 @@ class TemplateRow(QFrame):
         pixmap = QPixmap(path)
         self.preview_label.setPixmap(pixmap.scaled(60, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
 
+    def set_active(self, active=True):
+        if active:
+            self.setStyleSheet("TemplateRow { background-color: #2c3e50; border: 2px solid #3498db; }")
+        else:
+            self.setStyleSheet("TemplateRow { background-color: #f8f9fa; border: 1px solid #dee2e6; }")
+
 class TemplateManagerTab(QWidget):
     def __init__(self):
         super().__init__()
@@ -98,7 +104,7 @@ class TemplateManagerTab(QWidget):
         main_layout = QVBoxLayout(self)
         
         # Title and Description
-        title = QLabel("Professional Template Manager")
+        title = QLabel("Elite Template Manager & Trainer")
         title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
         title.setStyleSheet("color: #2c3e50; margin-top: 10px;")
         main_layout.addWidget(title)
@@ -121,6 +127,11 @@ class TemplateManagerTab(QWidget):
         # Pre-populate all required items
         self._populate_required_items()
         
+        # Live Preview Mode
+        self.live_preview_cb = QCheckBox("ENABLE LIVE TEMPLATE VERIFICATION (Highlights matches on Dashboard)")
+        self.live_preview_cb.setStyleSheet("font-weight: bold; color: #e67e22; margin: 10px;")
+        main_layout.addWidget(self.live_preview_cb)
+
         # Footer Actions
         footer = QHBoxLayout()
         self.save_btn = QPushButton("💾 SAVE & APPLY ALL TEMPLATES")

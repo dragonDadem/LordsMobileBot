@@ -91,3 +91,23 @@ class EmulatorManager:
             cmd = f"input swipe {x1} {y1} {x2} {y2} {duration}"
             self.adb_device.shell(cmd)
             logger.debug(f"ADB Swipe: ({x1},{y1}) to ({x2},{y2})")
+
+    def restart_app(self, package_name="com.igg.android.lordsmobile"):
+        """Force stop and start the game app."""
+        if self.adb_device:
+            logger.info(f"Restarting app: {package_name}")
+            self.adb_device.shell(f"am force-stop {package_name}")
+            time.sleep(2)
+            self.adb_device.shell(f"monkey -p {package_name} -c android.intent.category.LAUNCHER 1")
+            return True
+        return False
+
+    def is_adb_alive(self):
+        """Check if ADB connection is still responsive."""
+        try:
+            if self.adb_device:
+                res = self.adb_device.shell("echo 1")
+                return res.strip() == "1"
+        except:
+            pass
+        return False

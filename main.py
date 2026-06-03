@@ -2,6 +2,7 @@ import sys
 import time
 import threading
 import os
+import cv2
 from PyQt6.QtWidgets import QApplication, QTableWidgetItem
 from PyQt6.QtGui import QImage
 
@@ -9,6 +10,7 @@ from PyQt6.QtGui import QImage
 from emulator.manager import EmulatorManager
 from vision.capture import ScreenCapture
 from vision.detector import ResourceDetector
+from vision.scene_manager import SceneDetector
 from scanner.spiral import SpiralScanner
 from dispatch.manager import ArmyDispatcher
 from storage.database import BotDatabase
@@ -21,6 +23,8 @@ from guild.guild_manager import GuildManager
 from combat.monster_hunter import MonsterHunter
 from safety.protection import ProtectionSystem
 from resources.resource_manager import ResourceManager
+from core.stats import StatsManager
+from core.scheduler import TaskScheduler
 
 class LordsMobileBot:
     def __init__(self, ui):
@@ -42,8 +46,17 @@ class LordsMobileBot:
         self.combat = MonsterHunter(self.emulator, self.detector)
         self.protection = ProtectionSystem(self.emulator, self.detector)
         self.resources = ResourceManager(self.emulator, self.detector)
+        self.scene_detector = SceneDetector(self.detector)
+        self.stats = StatsManager()
+        self.scheduler = TaskScheduler()
+        self._init_scheduler()
         self.last_gift_collection = 0
         
+    def _init_scheduler(self):
+        self.scheduler.add_task("guild_gifts", 10800) # 3 hours
+        self.scheduler.add_task("shield_check", 60)    # 1 min
+        self.scheduler.add_task("monster_hunt", 600)   # 10 mins
+
     def initialize(self):
         """Initial check for emulator."""
         logger.info("Initializing Bot...")
@@ -78,6 +91,8 @@ class LordsMobileBot:
             self.capturer = capturer # Store for access if needed
             dispatcher = ArmyDispatcher(self.emulator)
             startup_complete = False
+            consecutive_failures = 0
+            last_ui_update = 0
             
             while self.running:
                 if self.paused:
@@ -86,54 +101,96 @@ class LordsMobileBot:
 
                 # 1. Capture and Stream
                 screen_img = capturer.capture_win32()
-                if screen_img is not None:
-                    h, w, ch = screen_img.shape
-                    bytes_per_line = ch * w
-                    q_img = QImage(screen_img.data, w, h, bytes_per_line, QImage.Format.Format_BGR888)
-                    self.ui.signals.new_frame.emit(q_img)
-                else:
-                    logger.error("Failed to capture screen.")
+
+                # Periodic UI Update
+                if time.time() - last_ui_update > 2:
+                    self.ui.signals.stats_updated.emit(self.stats.get_summary())
+                    last_ui_update = time.time()
+
+                # Live Template Verification (Debug/Training mode)
+                if self.ui.template_manager.live_preview_cb.isChecked() and screen_img is not None:
+                    debug_img = screen_img.copy()
+                    for t in self.detector.ui_templates:
+                        match = self.detector.detect_ui_button(debug_img, t)
+                        if match:
+                            cv2.rectangle(debug_img,
+                                          (match['x']-20, match['y']-20),
+                                          (match['x']+20, match['y']+20),
+                                          (0, 255, 0), 2)
+                    screen_img = debug_img
+
+                if screen_img is None:
+                    consecutive_failures += 1
+                    logger.warning(f"Screen capture failed ({consecutive_failures}/5)")
+                    if consecutive_failures >= 5:
+                        self.ui.add_log("CRITICAL: Emulator unresponsive. Restarting...")
+                        self.emulator.restart_app()
+                        consecutive_failures = 0
+                        startup_complete = False
+                        time.sleep(10)
                     time.sleep(2)
                     continue
 
+                consecutive_failures = 0 # Reset on success
+
+                # Stream to UI
+                h, w, ch = screen_img.shape
+                bytes_per_line = ch * w
+                q_img = QImage(screen_img.data, w, h, bytes_per_line, QImage.Format.Format_BGR888)
+                self.ui.signals.new_frame.emit(q_img)
+
                 # 1.4 Security Check (Highest Priority)
                 if self.ui.auto_shield_cb.isChecked():
-                    if self.protection.check_for_threats(capturer):
+                    if self.protection.check_for_threats(screen_img, capturer):
                         # Pause other tasks if under attack
                         continue
 
                 # 1.5 Guild Tasks (Pro Feature)
                 if self.ui.guild_help_cb.isChecked():
-                    self.guild.check_and_help(capturer)
+                    if self.guild.check_and_help(capturer):
+                        self.stats.add_help()
                 
-                if self.ui.guild_gift_cb.isChecked():
-                    # Collect gifts every 30 mins
-                    if time.time() - self.last_gift_collection > 1800:
-                        if self.guild.collect_gifts(capturer):
-                            self.last_gift_collection = time.time()
+                if self.ui.guild_gift_cb.isChecked() and self.scheduler.should_run("guild_gifts"):
+                    if self.guild.collect_gifts(capturer):
+                        self.scheduler.mark_run("guild_gifts")
+                        self.stats.add_gift()
 
                 # 1.6 Monster Hunting (Pro Feature)
-                if self.ui.monster_hunt_cb.isChecked():
-                    self.combat.hunt_nearby_monster(capturer)
+                if self.ui.monster_hunt_cb.isChecked() and self.scheduler.should_run("monster_hunt"):
+                    if self.combat.hunt_nearby_monster(capturer):
+                        self.scheduler.mark_run("monster_hunt")
+                        self.stats.add_hunt()
                 
                 # 1.7 Resource Management (Pro Feature)
                 if self.ui.auto_resource_cb.isChecked():
                     # Check every 10 minutes or so
                     pass
 
-                # 2. Auto-Startup Logic
-                if not startup_complete:
+                # 2. Scene-Aware Navigation & Startup
+                scene = self.scene_detector.detect_current_scene(screen_img)
+                if scene == "LOADING":
+                    time.sleep(5)
+                    continue
+                elif scene == "AD":
+                    match = self.detector.detect_ui_button(screen_img, 'close_panel')
+                    if match: self.emulator.send_click(match['x'], match['y'])
+                    continue
+                elif scene == "BASE":
                     match = self.detector.detect_ui_button(screen_img, 'base_to_map')
                     if match:
-                        logger.info("Detected 'Go to Map' button.")
                         self.emulator.send_click(match['x'], match['y'])
-                        time.sleep(5)
-                        self.emulator.send_click(960, 537) # Go to center
-                        startup_complete = True
-                        self.ui.signals.status_changed.emit("Gathering Loop")
-                    else:
-                        time.sleep(2)
-                        continue
+                        time.sleep(3)
+                    continue
+                elif scene == "UNKNOWN" and not startup_complete:
+                    # Attempt to find any known button or wait
+                    time.sleep(2)
+                    continue
+
+                if not startup_complete and scene == "MAP":
+                    logger.info("On Map. Navigating to center.")
+                    self.emulator.send_click(960, 537) # Go to center
+                    startup_complete = True
+                    self.ui.signals.status_changed.emit("Gathering Loop")
 
                 # 3. Gathering Logic & Task Management
                 expired_ids = self.db.get_expired_armies()
@@ -167,10 +224,16 @@ class LordsMobileBot:
                     else:
                         # Move map logic using SpiralScanner
                         next_pos = self.scanner.get_next_grid_pos()
-                        logger.info(f"No resources found. Moving to next spiral position: {next_pos}")
-                        # In a real bot, we'd calculate swipe vector, but for now we simulate coordinate entry
-                        # if the game allows direct coordinate entry. Otherwise, swipe:
-                        self.emulator.send_swipe(1200, 450, 400, 450, 1000) # Simple horizontal swipe
+                        logger.info(f"No resources found. Navigating to coordinate: {next_pos}")
+
+                        # Use coordinate entry (Simulated via ADB for precision)
+                        # Sequence: Click Coordinate Button -> Input X -> Input Y -> Click Go
+                        self.emulator.send_click(100, 850) # Coords button
+                        time.sleep(1)
+                        self.emulator.adb_device.shell(f"input text {next_pos[0]}")
+                        time.sleep(0.5)
+                        self.emulator.adb_device.shell(f"input text {next_pos[1]}")
+                        self.emulator.adb_device.shell("input keyevent 66") # Enter
                         time.sleep(2)
 
                 Humanizer.sleep(2, 4)

@@ -9,7 +9,7 @@ from PyQt6.QtGui import QImage
 from emulator.manager import EmulatorManager
 from vision.capture import ScreenCapture
 from vision.detector import ResourceDetector
-from scanner.spiral import SpiralScanner
+from scanner.spiral import GridScanner
 from dispatch.manager import ArmyDispatcher
 from storage.database import BotDatabase
 from safety.humanizer import Humanizer
@@ -37,7 +37,7 @@ class LordsMobileBot:
         )
         self.detector = ResourceDetector()
         self.template_engine = TemplateEngine()
-        self.scanner = SpiralScanner()
+        self.scanner = GridScanner(self.emulator)
         self.guild = GuildManager(self.emulator, self.detector)
         self.combat = MonsterHunter(self.emulator, self.detector)
         self.protection = ProtectionSystem(self.emulator, self.detector)
@@ -130,23 +130,44 @@ class LordsMobileBot:
                 # 3. Gathering Logic
                 active_tasks = self.db.get_all_active_tasks()
                 self.ui.signals.tasks_updated.emit(active_tasks)
+                
+                # Update stats in UI
+                stats = self.db.get_all_stats()
+                self.ui.signals.stats_updated.emit(stats)
 
                 if len(active_tasks) < 6:
                     selected_res = self.config.get("resources_to_gather", [])
-                    match = self.detector.detect_best_resource(screen_img)
-                    if match:
-                        res_type = match['name'].split('_')[0]
-                        if res_type in selected_res:
-                            logger.info(f"Found {match['name']}. Dispatching...")
-                            if dispatcher.dispatch_to_tile(match['x'], match['y'], self.detector, screen_img):
-                                army_id = len(active_tasks) + 1
-                                # Get duration from config timers
-                                level = match['name'].split('_lv')[-1]
-                                duration = self.config.get("timers", {}).get(res_type, {}).get(level, 60) * 60
-                                self.db.add_active_army(army_id, res_type, int(level), duration, 0, 0)
+                    
+                    # 1. Check Map Memory first for known high-level resources
+                    best_known = self.db.get_best_from_memory(selected_res, min_level=4)
+                    if best_known:
+                        logger.info(f"Using memory: Found {best_known['resource_type']} Lv {best_known['resource_level']} at ({best_known['x']}, {best_known['y']})")
+                        # In a real scenario, we'd navigate there. For now, we continue scanning.
+                    
+                    # 2. Scan current screen
+                    matches = self.detector.detect_all_resources(screen_img)
+                    if matches:
+                        # Prioritize by level
+                        matches.sort(key=lambda m: int(m['name'].split('_lv')[-1]), reverse=True)
+                        
+                        for match in matches:
+                            res_type = match['name'].split('_')[0]
+                            level = int(match['name'].split('_lv')[-1])
+                            
+                            # Save to memory
+                            self.db.save_resource_to_memory(self.scanner.current_x, self.scanner.current_y, res_type, level)
+                            
+                            if res_type in selected_res and len(active_tasks) < 6:
+                                logger.info(f"Smart Target: {match['name']} at screen ({match['x']}, {match['y']})")
+                                if dispatcher.dispatch_to_tile(match['x'], match['y'], self.detector, screen_img):
+                                    army_id = len(active_tasks) + 1
+                                    duration = self.config.get("timers", {}).get(res_type, {}).get(str(level), 60) * 60
+                                    self.db.add_active_army(army_id, res_type, level, duration, self.scanner.current_x, self.scanner.current_y)
+                                    self.db.increment_stat(res_type)
+                                    break # One dispatch per loop
                     else:
-                        # Move map logic
-                        pass
+                        # 3. No resources found, move map
+                        self.scanner.move_next()
 
                 Humanizer.sleep(2, 4)
 

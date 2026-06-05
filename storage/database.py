@@ -34,6 +34,26 @@ class BotDatabase:
                 setting_key TEXT PRIMARY KEY,
                 setting_value TEXT
             )''')
+            
+            # Table for Map Memory (Discovering resources)
+            conn.execute('''CREATE TABLE IF NOT EXISTS map_memory (
+                x INTEGER,
+                y INTEGER,
+                resource_type TEXT,
+                resource_level INTEGER,
+                discovered_at REAL,
+                PRIMARY KEY (x, y)
+            )''')
+            
+            # Table for Collection Statistics
+            conn.execute('''CREATE TABLE IF NOT EXISTS stats (
+                resource_type TEXT PRIMARY KEY,
+                total_collected INTEGER DEFAULT 0
+            )''')
+            
+            # Initialize stats if empty
+            for res in ['food', 'wood', 'stone', 'ore', 'gold']:
+                conn.execute("INSERT OR IGNORE INTO stats (resource_type, total_collected) VALUES (?, 0)", (res,))
 
     def add_active_army(self, army_id, res_type, level, duration, x, y):
         end_time = time.time() + duration
@@ -82,3 +102,36 @@ class BotDatabase:
                 return row[0] if row else default
         except:
             return default
+
+    def save_resource_to_memory(self, x, y, res_type, level):
+        """Save a discovered resource location to memory."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute('''INSERT OR REPLACE INTO map_memory 
+                          VALUES (?, ?, ?, ?, ?)''', (x, y, res_type, level, time.time()))
+
+    def get_best_from_memory(self, preferred_types, min_level=1):
+        """Find the best resource in memory that isn't too old."""
+        now = time.time()
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            # Only consider resources found in the last 2 hours
+            placeholders = ', '.join(['?'] * len(preferred_types))
+            query = f"""SELECT * FROM map_memory 
+                        WHERE resource_type IN ({placeholders}) 
+                        AND resource_level >= ? 
+                        AND discovered_at > ? 
+                        ORDER BY resource_level DESC, discovered_at DESC LIMIT 1"""
+            cursor = conn.execute(query, (*preferred_types, min_level, now - 7200))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def increment_stat(self, res_type, amount=1):
+        """Increment the total collected count for a resource."""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("UPDATE stats SET total_collected = total_collected + ? WHERE resource_type = ?", (amount, res_type))
+
+    def get_all_stats(self):
+        """Get all collection statistics."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("SELECT * FROM stats")
+            return {row[0]: row[1] for row in cursor.fetchall()}

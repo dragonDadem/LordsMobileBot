@@ -12,6 +12,7 @@ class DashboardSignals(QObject):
     new_frame = pyqtSignal(QImage)
     status_changed = pyqtSignal(str)
     tasks_updated = pyqtSignal(list)
+    stats_updated = pyqtSignal(dict)
 
 class LiveDashboard(QMainWindow):
     def __init__(self):
@@ -143,6 +144,19 @@ class LiveDashboard(QMainWindow):
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
 
+        # Live Statistics
+        stats_group = QGroupBox("Live Collection Stats")
+        stats_grid = QGridLayout()
+        self.stat_labels = {}
+        resources = ["food", "wood", "stone", "ore", "gold"]
+        for i, res in enumerate(resources):
+            lbl = QLabel(f"{res.capitalize()}: 0")
+            lbl.setStyleSheet("font-weight: bold; color: #27ae60; font-size: 12px;")
+            stats_grid.addWidget(lbl, i // 2, i % 2)
+            self.stat_labels[res] = lbl
+        stats_group.setLayout(stats_grid)
+        right_layout.addWidget(stats_group)
+
         # Task Table
         table_label = QLabel("ACTIVE GATHERING TASKS")
         table_label.setStyleSheet("font-weight: bold; color: #2980b9;")
@@ -233,6 +247,12 @@ class LiveDashboard(QMainWindow):
         self.signals.new_frame.connect(self._update_screen)
         self.signals.status_changed.connect(self._update_status)
         self.signals.tasks_updated.connect(self._update_tasks)
+        self.signals.stats_updated.connect(self._update_stats)
+
+    def _update_stats(self, stats):
+        for res, count in stats.items():
+            if res in self.stat_labels:
+                self.stat_labels[res].setText(f"{res.capitalize()}: {count}")
 
     def _update_screen(self, q_img):
         pixmap = QPixmap.fromImage(q_img)

@@ -1,75 +1,64 @@
+import time
 import math
+from core.logger import logger
 
-class SpiralScanner:
+class GridScanner:
     """
-    Module 4: World Map Navigation
-    Implements an adaptive spiral scanning algorithm to search for resources.
+    Module 4: Optimized Grid-based World Map Scanner.
+    Implements a spiral pattern with swipe control for map navigation.
     """
-    def __init__(self, start_x=512, start_y=512, step_size=1):
-        self.center_x = start_x
-        self.center_y = start_y
-        self.step_size = step_size
-        self.current_step = 0
-        self.max_map_size = 1024 # Typical Lords Mobile map size
+    def __init__(self, emulator, start_x=512, start_y=512):
+        self.emu = emulator
+        self.current_x = start_x
+        self.current_y = start_y
+        self.step_size = 5 # How many game tiles to move per swipe
+        self.direction = 0 # 0: Right, 1: Down, 2: Left, 3: Up
+        self.steps_in_direction = 1
+        self.current_step_count = 0
+        self.change_direction_count = 0
+        self.max_map_size = 1024
 
-    def get_next_grid_pos(self):
-        """
-        Calculate the next (X, Y) coordinate in a square spiral pattern.
-        """
-        n = self.current_step
-        
-        # Calculate layer (k)
-        k = math.ceil((math.sqrt(n + 1) - 1) / 2)
-        if k == 0:
-            x, y = 0, 0
-        else:
-            t = 2 * k - 1
-            m = t * t
-            p = n - m
-            s = 2 * k
-            
-            if p < s:
-                x, y = k, p - k + 1
-            elif p < 2 * s:
-                x, y = k - (p - s) - 1, k
-            elif p < 3 * s:
-                x, y = -k, k - (p - 2 * s) - 1
-            else:
-                x, y = -k + (p - 3 * s) + 1, -k
-        
-        self.current_step += 1
-        
-        # Scale to map coordinates
-        map_x = self.center_x + x * self.step_size
-        map_y = self.center_y + y * self.step_size
-        
-        # Wrap or clamp within map bounds
-        map_x = max(0, min(self.max_map_size - 1, map_x))
-        map_y = max(0, min(self.max_map_size - 1, map_y))
-        
-        return (map_x, map_y)
+    def move_next(self):
+        """Move to the next grid position in a spiral pattern."""
+        dx, dy = 0, 0
+        if self.direction == 0: dx = self.step_size # Right
+        elif self.direction == 1: dy = self.step_size # Down
+        elif self.direction == 2: dx = -self.step_size # Left
+        elif self.direction == 3: dy = -self.step_size # Up
 
-    def calculate_swipe_vector(self, current_pos, target_pos, pixels_per_tile=100):
-        """
-        Convert map coordinate difference to screen swipe vector.
-        This depends on the zoom level (pixels_per_tile).
-        """
-        dx = target_pos[0] - current_pos[0]
-        dy = target_pos[1] - current_pos[1]
+        # Convert tile movement to swipe pixels (Rough estimation for 1600x900)
+        # Center of the screen
+        center_x, center_y = 800, 450
+        # Invert dx/dy for map dragging (pull map to move camera)
+        # 20 pixels per tile is a rough estimate for standard zoom
+        swipe_x = center_x - (dx * 20) 
+        swipe_y = center_y - (dy * 20)
+
+        self.emu.send_swipe(center_x, center_y, swipe_x, swipe_y, duration=600)
+        self.current_x += dx
+        self.current_y += dy
         
-        # Swiping direction is opposite to map movement
-        swipe_x = -dx * pixels_per_tile
-        swipe_y = -dy * pixels_per_tile
+        # Spiral logic
+        self.current_step_count += 1
+        if self.current_step_count >= self.steps_in_direction:
+            self.current_step_count = 0
+            self.direction = (self.direction + 1) % 4
+            self.change_direction_count += 1
+            if self.change_direction_count % 2 == 0:
+                self.steps_in_direction += 1
         
-        return (swipe_x, swipe_y)
+        # Keep within map bounds
+        self.current_x = max(0, min(self.max_map_size - 1, self.current_x))
+        self.current_y = max(0, min(self.max_map_size - 1, self.current_y))
+        
+        logger.info(f"Scanner moved to approx Map Coord: ({self.current_x}, {self.current_y})")
+        time.sleep(1.5) # Wait for map to settle
 
     def reset(self):
         """Restart scanning from the center."""
-        self.current_step = 0
-
-if __name__ == "__main__":
-    # Unit test for Module 4
-    scanner = SpiralScanner()
-    print("First 10 spiral coordinates:")
-    for _ in range(10):
-        print(scanner.get_next_grid_pos())
+        self.current_x = 512
+        self.current_y = 512
+        self.direction = 0
+        self.steps_in_direction = 1
+        self.current_step_count = 0
+        self.change_direction_count = 0

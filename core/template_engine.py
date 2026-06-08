@@ -23,7 +23,51 @@ class TemplateEngine:
                     return json.load(f)
             except Exception as e:
                 logger.error(f"Failed to load template metadata: {e}")
-        return []
+        
+        # If file missing or error, return defaults but don't save yet 
+        # (waiting for user to upload images)
+        return self._get_default_metadata()
+
+    def _get_default_metadata(self):
+        """Returns a list of default template entries that the user needs to provide images for."""
+        defaults = []
+        
+        # 1. Resources (Lv 1-5)
+        for res in ["Food", "Wood", "Stone", "Ore", "Gold"]:
+            for lv in range(1, 6):
+                name = f"{res} Lv {lv}"
+                defaults.append({
+                    "name": name,
+                    "type": "Resources",
+                    "path": "", # No image yet
+                    "key": name.lower().replace(" ", "_")
+                })
+        
+        # 2. UI Buttons
+        ui_buttons = [
+            "Base to World", "Open Map", "Close Panel", 
+            "Auto Select", "Deploy Army", "Lowest Tier", 
+            "Gather Button"
+        ]
+        for btn in ui_buttons:
+            defaults.append({
+                "name": btn,
+                "type": "UI Buttons",
+                "path": "",
+                "key": btn.lower().replace(" ", "_")
+            })
+            
+        # 3. Shield System
+        shield_elements = ["Boost Menu", "24h Shield", "Confirm Button"]
+        for item in shield_elements:
+            defaults.append({
+                "name": item,
+                "type": "Shield System",
+                "path": "",
+                "key": item.lower().replace(" ", "_")
+            })
+            
+        return defaults
 
     def save_template(self, name, category, source_path):
         """Copies the image to the local assets and updates metadata."""

@@ -46,17 +46,29 @@ class LordsMobileBot:
     def initialize(self):
         """Initial check for emulator."""
         logger.info("Initializing Bot...")
-        if not self.emulator.find_ldplayer_window():
-            logger.warning("LDPlayer not found. Attempting to launch...")
-            if not self.emulator.launch_emulator():
-                self.ui.add_log("CRITICAL: Could not find or launch LDPlayer.")
-                return False
         
-        self.emulator.set_window_resolution(1600, 900)
-        self.ui.add_log("Bot Initialized. Ready to start.")
-        return True
+        # 1. First-run: Check if templates exist, if not, warn user but continue
+        if not self.template_engine.templates or all(t['path'] == "" for t in self.template_engine.templates):
+            logger.warning("No template images found. User needs to upload images in Template Manager.")
+            self.ui.add_log("NOTICE: Please upload images in 'Template Manager' tab to enable detection.")
+
+        # 2. Find or launch emulator
+        if not self.emulator.find_ldplayer_window():
+            logger.warning("LDPlayer not found. You can launch it manually or check 'Emulator Settings'.")
+            self.ui.add_log("Status: Waiting for LDPlayer...")
+        else:
+            self.emulator.set_window_resolution(1600, 900)
+            self.ui.add_log("LDPlayer detected and connected.")
+            
+        return True # Always return True to allow UI to show, even if emulator is missing
 
     def start(self):
+        # Re-check emulator before starting loop
+        if not self.emulator.window_handle:
+            if not self.emulator.find_ldplayer_window():
+                self.ui.add_log("ERROR: Cannot start. LDPlayer window not found.")
+                return
+
         if not self.running:
             self.running = True
             self.paused = False

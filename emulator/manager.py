@@ -17,17 +17,27 @@ class EmulatorManager:
         self.client_rect = (0, 0, 1600, 900)
         
     def find_ldplayer_window(self):
-        """Find the LDPlayer window handle."""
+        """Find the LDPlayer window handle with smart matching."""
+        # 1. Try exact match with user provided title
         self.window_handle = win32gui.FindWindow(None, self.window_title)
+        
+        # 2. Try common aliases if exact match fails
         if not self.window_handle:
-            # Try partial match
+            aliases = [self.window_title, "LDPlayer", "LDPlayer-1", "LDPlayer-2", "LDP-1"]
             def callback(hwnd, extra):
-                if self.window_title in win32gui.GetWindowText(hwnd):
-                    extra.append(hwnd)
+                title = win32gui.GetWindowText(hwnd)
+                for alias in aliases:
+                    if alias in title:
+                        extra.append(hwnd)
+                        break
+            
             hwnds = []
             win32gui.EnumWindows(callback, hwnds)
             if hwnds:
                 self.window_handle = hwnds[0]
+                # Update window title to what we actually found
+                self.window_title = win32gui.GetWindowText(self.window_handle)
+                logger.info(f"Found emulator window: {self.window_title}")
         
         if self.window_handle:
             self.update_client_rect()
